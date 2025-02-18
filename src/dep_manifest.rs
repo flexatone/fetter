@@ -105,49 +105,42 @@ impl DepManifest {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
+        let mut env_marker_active = false;
         let mut dep_specs: HashMap<String, DepSpecOOM> = HashMap::new();
+
         for line in ds_iter {
             let spec = line.as_ref().trim();
             if spec.is_empty() {
                 continue;
             }
             let dep_spec = DepSpec::from_string(spec)?;
+            env_marker_active |= !dep_spec.marker.is_empty();
+
             if let Some(dsoom) = dep_specs.remove(&dep_spec.key) {
+                // remove old One dep spec and upgrade it to a Many
                 dep_specs.insert(dep_spec.key.clone(), dsoom.to_many(dep_spec));
             } else {
                 dep_specs.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec));
             }
         }
-        Ok(DepManifest { dep_specs, env_marker_active: false })
+        Ok(DepManifest { dep_specs, env_marker_active })
     }
 
     pub(crate) fn from_dep_specs(dep_specs: &Vec<DepSpec>) -> ResultDynError<Self> {
+        let mut env_marker_active = false;
         let mut ds: HashMap<String, DepSpecOOM> = HashMap::new();
+
         for dep_spec in dep_specs {
-            if let Some(dep_spec_prev) = ds.remove(&dep_spec.key) {
-                // remove and replace with composite
-                let dep_spec_new: DepSpec = match dep_spec_prev {
-                    DepSpecOOM::One(dsn) => {
-                        DepSpec::from_dep_specs(vec![&dsn, &dep_spec])?
-                    }
-                    DepSpecOOM::Many(dsnv) => {
-                        // let dss: Vec<&DepSpec> = std::iter::once(dep_spec)
-                        //     .chain(dsnv.iter().cloned())
-                        //     .collect();
-                        let mut dss: Vec<&DepSpec> = vec![&dep_spec];
-                        dss.extend(dsnv.iter());
-                        // let mut dss: Vec<&DepSpec> = Vec::with_capacity(dsnv.len() + 1);
-                        // dss.push(dep_spec);
-                        // dss.extend(dsnv.iter());
-                        DepSpec::from_dep_specs(dss)?
-                    }
-                };
-                ds.insert(dep_spec_new.key.clone(), DepSpecOOM::One(dep_spec_new));
+            env_marker_active |= !dep_spec.marker.is_empty();
+
+            if let Some(dsoom) = ds.remove(&dep_spec.key) {
+                // remove old OOM and upgrade it to a Many
+                ds.insert(dep_spec.key.clone(), dsoom.to_many(dep_spec.clone()));
             } else {
                 ds.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec.clone()));
             }
         }
-        Ok(DepManifest { dep_specs: ds, env_marker_active: false })
+        Ok(DepManifest { dep_specs: ds, env_marker_active })
     }
 
     //--------------------------------------------------------------------------
