@@ -138,8 +138,8 @@ pub(crate) struct DepSpec {
     pub(crate) url: Option<String>,
     operators: Vec<DepOperator>,
     versions: Vec<VersionSpec>,
-    pub(crate) marker: String,
-    pub(crate) marker_expr: Option<HashMap<String, EnvMarkerExpr>>,
+    pub(crate) env_marker: String,
+    pub(crate) env_marker_expr: Option<HashMap<String, EnvMarkerExpr>>,
 }
 
 impl DepSpec {
@@ -168,8 +168,8 @@ impl DepSpec {
                     url: Some(input.to_string()),
                     operators,
                     versions,
-                    marker: String::new(),
-                    marker_expr: None,
+                    env_marker: String::new(),
+                    env_marker_expr: None,
                 });
             }
         }
@@ -199,8 +199,8 @@ impl DepSpec {
         let mut url = None;
         let mut operators = Vec::new();
         let mut versions = Vec::new();
-        let mut marker = String::new();
-        let mut marker_expr: Option<HashMap<String, EnvMarkerExpr>> = None;
+        let mut env_marker = String::new();
+        let mut env_marker_expr: Option<HashMap<String, EnvMarkerExpr>> = None;
 
         let inner_pairs: Vec<_> = parse_result.into_inner().collect();
         for pair in inner_pairs {
@@ -239,21 +239,19 @@ impl DepSpec {
                 }
                 Rule::quoted_marker => {
                     // normalize all whitespace to one space
-                    marker = pair
+                    env_marker = pair
                         .as_str()
                         .trim_start_matches(';')
                         .split_whitespace()
                         .collect::<Vec<_>>()
                         .join(" ");
-                    println!("marker: {}", marker);
-                    // marker = pair.as_str().trim_start_matches(';').trim().to_string();
-                    if !marker.is_empty() {
+                    if !env_marker.is_empty() {
                         // only create hashmap if we hae content
                         let mut me: HashMap<String, EnvMarkerExpr> = HashMap::new();
                         for inner_pair in pair.into_inner() {
                             extract_marker_expr(inner_pair, &mut me);
                         }
-                        marker_expr = Some(me);
+                        env_marker_expr = Some(me);
                     }
                 }
                 _ => {}
@@ -280,8 +278,8 @@ impl DepSpec {
             url,
             operators,
             versions,
-            marker,
-            marker_expr,
+            env_marker,
+            env_marker_expr,
         })
     }
     /// Create a DepSpec from a Package struct.
@@ -299,8 +297,8 @@ impl DepSpec {
             url: None,
             operators,
             versions,
-            marker: String::new(),
-            marker_expr: None,
+            env_marker: String::new(),
+            env_marker_expr: None,
         })
     }
 
@@ -325,8 +323,8 @@ impl DepSpec {
                 url: None,
                 operators,
                 versions,
-                marker: String::new(), // if these are defined, can we merge?
-                marker_expr: None,
+                env_marker: String::new(), // if these are defined, can we merge?
+                env_marker_expr: None,
             });
         }
         Err(format!("Unreconcilable dependency specifiers: {:?}", dep_specs).into())
@@ -380,8 +378,8 @@ impl DepSpec {
 
     // Given an EnvMarkerState, determine if this DepSpec should be included.
     pub(crate) fn validate_env_marker(&self, ems: &EnvMarkerState) -> bool {
-        if let Some(me) = &self.marker_expr {
-            return marker_eval(&self.marker, &me, ems).unwrap();
+        if let Some(me) = &self.env_marker_expr {
+            return marker_eval(&self.env_marker, &me, ems).unwrap();
         }
         true
     }
@@ -389,9 +387,9 @@ impl DepSpec {
 
 impl fmt::Display for DepSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let marker = match self.marker.is_empty() {
+        let marker = match self.env_marker.is_empty() {
             true => "".to_string(),
-            false => format!("; {}", &self.marker),
+            false => format!("; {}", &self.env_marker),
         };
         let mut parts = Vec::new();
         // if we have versions, we do not need URL
@@ -910,7 +908,7 @@ mod tests {
     fn test_dep_spec_json_a() {
         let ds = DepSpec::from_whl("https://example.com/app-1.0.whl").unwrap();
         let json = serde_json::to_string(&ds).unwrap();
-        assert_eq!(json, "{\"name\":\"app\",\"key\":\"app\",\"url\":\"https://example.com/app-1.0.whl\",\"operators\":[\"Eq\"],\"versions\":[\"1.0\"],\"marker\":\"\",\"marker_expr\":null}")
+        assert_eq!(json, "{\"name\":\"app\",\"key\":\"app\",\"url\":\"https://example.com/app-1.0.whl\",\"operators\":[\"Eq\"],\"versions\":[\"1.0\"],\"env_marker\":\"\",\"env_marker_expr\":null}")
     }
 
     //--------------------------------------------------------------------------
@@ -924,19 +922,19 @@ mod tests {
             format!("{:?}", ds1.operators),
             "[GreaterThanOrEq, Eq, LessThan]"
         );
-        assert_eq!(ds1.marker, "python_version < '2.7'");
-        assert_eq!(format!("{:?}", ds1.marker_expr.unwrap()), "{\"python_version < '2.7'\": EnvMarkerExpr { left: \"python_version\", operator: \"<\", right: \"2.7\" }}");
+        assert_eq!(ds1.env_marker, "python_version < '2.7'");
+        assert_eq!(format!("{:?}", ds1.env_marker_expr.unwrap()), "{\"python_version < '2.7'\": EnvMarkerExpr { left: \"python_version\", operator: \"<\", right: \"2.7\" }}");
     }
 
     #[test]
     fn test_dep_spec_env_marker_b() {
         let input = "foo >= 3.4 ; python_version < '2.7.9' or (python_version >= '3.0' and python_version < '3.4')";
         let ds1 = DepSpec::from_string(input).unwrap();
-        assert_eq!(ds1.marker, "python_version < '2.7.9' or (python_version >= '3.0' and python_version < '3.4')");
-        // assert_eq!(ds1.marker_expr.len(), 3);
+        assert_eq!(ds1.env_marker, "python_version < '2.7.9' or (python_version >= '3.0' and python_version < '3.4')");
+        // assert_eq!(ds1.env_marker_expr.len(), 3);
 
         let mut keys: Vec<String> =
-            ds1.marker_expr.as_ref().unwrap().keys().cloned().collect();
+            ds1.env_marker_expr.as_ref().unwrap().keys().cloned().collect();
         keys.sort();
         assert_eq!(
             keys,
@@ -952,10 +950,10 @@ mod tests {
     fn test_dep_spec_env_marker_c() {
         let input = "foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or (python_version >= '3.0' and python_version < '3.4')";
         let ds1 = DepSpec::from_string(input).unwrap();
-        assert_eq!(ds1.marker, "(python_version > '2.0' and python_version < '2.7.9') or (python_version >= '3.0' and python_version < '3.4')");
-        assert_eq!(ds1.marker_expr.as_ref().unwrap().len(), 4);
+        assert_eq!(ds1.env_marker, "(python_version > '2.0' and python_version < '2.7.9') or (python_version >= '3.0' and python_version < '3.4')");
+        assert_eq!(ds1.env_marker_expr.as_ref().unwrap().len(), 4);
 
-        let mut keys: Vec<String> = ds1.marker_expr.unwrap().keys().cloned().collect();
+        let mut keys: Vec<String> = ds1.env_marker_expr.unwrap().keys().cloned().collect();
         keys.sort();
         assert_eq!(
             keys,
@@ -972,10 +970,10 @@ mod tests {
     fn test_dep_spec_env_marker_d() {
         let input = "foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version >= '3.0'";
         let ds1 = DepSpec::from_string(input).unwrap();
-        assert_eq!(ds1.marker, "(python_version > '2.0' and python_version < '2.7.9') or python_version >= '3.0'");
-        assert_eq!(ds1.marker_expr.as_ref().unwrap().len(), 3);
+        assert_eq!(ds1.env_marker, "(python_version > '2.0' and python_version < '2.7.9') or python_version >= '3.0'");
+        assert_eq!(ds1.env_marker_expr.as_ref().unwrap().len(), 3);
 
-        let mut keys: Vec<String> = ds1.marker_expr.unwrap().keys().cloned().collect();
+        let mut keys: Vec<String> = ds1.env_marker_expr.unwrap().keys().cloned().collect();
         keys.sort();
         assert_eq!(
             keys,

@@ -547,7 +547,7 @@ mod tests {
         let ds = DepSpec::from_string("foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version >= '3.0'").unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
         )
     }
@@ -557,7 +557,7 @@ mod tests {
         let ds = DepSpec::from_string("foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version >= '3.15'").unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             false
         )
     }
@@ -567,7 +567,7 @@ mod tests {
         let ds = DepSpec::from_string("foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version < '3.5' or python_version >= '3.13'").unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
         )
     }
@@ -580,7 +580,7 @@ mod tests {
         .unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
         )
     }
@@ -590,7 +590,7 @@ mod tests {
         let ds = DepSpec::from_string("foo >= 3.4;   sys_platform == 'darwin' and platform_machine == 'arm64' and   platform_system   == 'foo' ").unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             false
         )
     }
@@ -600,7 +600,7 @@ mod tests {
         let ds = DepSpec::from_string("foo >= 3.4;   sys_platform == 'darwin' and platform_machine == 'arm64' and   platform_system   == 'Darwin' ").unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
         )
     }
@@ -610,7 +610,7 @@ mod tests {
         let ds = DepSpec::from_string("foo >= 3.4;   os_name == 'posix' and platform_python_implementation == 'CPython' and   platform_release  == '23.*' ").unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
         )
     }
@@ -620,7 +620,7 @@ mod tests {
         let ds = DepSpec::from_string("foo >= 3.4;   os_name == 'posix' and platform_python_implementation == 'foo' and   platform_release  == '23.*' ").unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             false
         )
     }
@@ -630,7 +630,7 @@ mod tests {
         let ds = DepSpec::from_string("foo >= 3.4;   os_name == 'posix' and platform_python_implementation == 'CPython' and  implementation_name  == 'cpython' ").unwrap();
         let ems = EnvMarkerState::from_sample().unwrap();
         assert_eq!(
-            marker_eval(&ds.marker, &ds.marker_expr.unwrap(), &ems).unwrap(),
+            marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
         )
     }

@@ -114,7 +114,7 @@ impl DepManifest {
                 continue;
             }
             let dep_spec = DepSpec::from_string(spec)?;
-            env_marker_active |= !dep_spec.marker.is_empty();
+            env_marker_active |= !dep_spec.env_marker.is_empty();
 
             if let Some(dsoom) = dep_specs.remove(&dep_spec.key) {
                 // remove old One dep spec and upgrade it to a Many
@@ -131,7 +131,7 @@ impl DepManifest {
         let mut ds: HashMap<String, DepSpecOOM> = HashMap::new();
 
         for dep_spec in dep_specs {
-            env_marker_active |= !dep_spec.marker.is_empty();
+            env_marker_active |= !dep_spec.env_marker.is_empty();
 
             if let Some(dsoom) = ds.remove(&dep_spec.key) {
                 // remove old OOM and upgrade it to a Many
@@ -1446,7 +1446,7 @@ numpy>= 2.0
             ds1,
         ];
         let dm1 = DepManifest::from_dep_specs(&specs).unwrap();
-        assert_eq!(dm.env_marker_active, false);
+        assert_eq!(dm1.env_marker_active, false);
         assert_eq!(dm1.validate(&p1, false).0, true);
     }
 
