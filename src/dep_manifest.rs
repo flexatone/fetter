@@ -76,7 +76,7 @@ enum DepSpecOOM {
 
 impl DepSpecOOM {
     /// Converts the current entry into Many if necessary and inserts a new DepSpec
-    fn add(self, dep: DepSpec) -> Self {
+    fn to_many(self, dep: DepSpec) -> Self {
         match self {
             Self::One(existing) => Self::Many(vec![existing, dep]),
             Self::Many(mut vec) => {
@@ -92,12 +92,14 @@ impl DepSpecOOM {
 #[derive(Debug, Clone)]
 pub(crate) struct DepManifest {
     dep_specs: HashMap<String, DepSpecOOM>,
+    env_marker_active: bool,
 }
 
 impl DepManifest {
     //--------------------------------------------------------------------------
     // constructors from internal structs
 
+    /// Core constructor that all constructors must delegate to.
     pub(crate) fn from_iter<I, S>(ds_iter: I) -> ResultDynError<Self>
     where
         I: IntoIterator<Item = S>,
@@ -111,15 +113,12 @@ impl DepManifest {
             }
             let dep_spec = DepSpec::from_string(spec)?;
             if let Some(dsoom) = dep_specs.remove(&dep_spec.key) {
-                dep_specs.insert(dep_spec.key.clone(), dsoom.add(dep_spec));
-                // return Err(
-                //     format!("Duplicate package key found: {}", dep_spec.key).into()
-                // );
+                dep_specs.insert(dep_spec.key.clone(), dsoom.to_many(dep_spec));
             } else {
                 dep_specs.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec));
             }
         }
-        Ok(DepManifest { dep_specs })
+        Ok(DepManifest { dep_specs, env_marker_active: false })
     }
 
     pub(crate) fn from_dep_specs(dep_specs: &Vec<DepSpec>) -> ResultDynError<Self> {
@@ -132,7 +131,15 @@ impl DepManifest {
                         DepSpec::from_dep_specs(vec![&dsn, &dep_spec])?
                     }
                     DepSpecOOM::Many(dsnv) => {
-                        panic!("here")
+                        // let dss: Vec<&DepSpec> = std::iter::once(dep_spec)
+                        //     .chain(dsnv.iter().cloned())
+                        //     .collect();
+                        let mut dss: Vec<&DepSpec> = vec![&dep_spec];
+                        dss.extend(dsnv.iter());
+                        // let mut dss: Vec<&DepSpec> = Vec::with_capacity(dsnv.len() + 1);
+                        // dss.push(dep_spec);
+                        // dss.extend(dsnv.iter());
+                        DepSpec::from_dep_specs(dss)?
                     }
                 };
                 ds.insert(dep_spec_new.key.clone(), DepSpecOOM::One(dep_spec_new));
@@ -140,7 +147,7 @@ impl DepManifest {
                 ds.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec.clone()));
             }
         }
-        Ok(DepManifest { dep_specs: ds })
+        Ok(DepManifest { dep_specs: ds, env_marker_active: false })
     }
 
     //--------------------------------------------------------------------------
@@ -170,12 +177,6 @@ impl DepManifest {
                         files.push_back(parent.join(post.trim()));
                     }
                 } else {
-                    // let ds = DepSpec::from_string(&line)?;
-                    // if dep_specs.contains_key(&ds.key) {
-                    //     return Err(
-                    //         format!("Duplicate package key found: {}", ds.key).into()
-                    //     );
-                    // }
                     dep_specs.push(line);
                 }
             }

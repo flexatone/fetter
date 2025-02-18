@@ -325,7 +325,7 @@ impl DepSpec {
                 url: None,
                 operators,
                 versions,
-                marker: String::new(),
+                marker: String::new(), // if these are defined, can we merge?
                 marker_expr: None,
             });
         }
