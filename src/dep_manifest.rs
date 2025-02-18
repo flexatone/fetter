@@ -123,7 +123,10 @@ impl DepManifest {
                 dep_specs.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec));
             }
         }
-        Ok(DepManifest { dep_specs, env_marker_active })
+        Ok(DepManifest {
+            dep_specs,
+            env_marker_active,
+        })
     }
 
     pub(crate) fn from_dep_specs(dep_specs: &Vec<DepSpec>) -> ResultDynError<Self> {
@@ -140,7 +143,10 @@ impl DepManifest {
                 ds.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec.clone()));
             }
         }
-        Ok(DepManifest { dep_specs: ds, env_marker_active })
+        Ok(DepManifest {
+            dep_specs: ds,
+            env_marker_active,
+        })
     }
 
     //--------------------------------------------------------------------------
