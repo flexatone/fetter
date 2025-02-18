@@ -1446,6 +1446,7 @@ numpy>= 2.0
             ds1,
         ];
         let dm1 = DepManifest::from_dep_specs(&specs).unwrap();
+        assert_eq!(dm.env_marker_active, false);
         assert_eq!(dm1.validate(&p1, false).0, true);
     }
 
