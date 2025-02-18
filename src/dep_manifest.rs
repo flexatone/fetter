@@ -1469,8 +1469,9 @@ dependencies = [
         let file_path = dir.path().join("pyproject.toml");
         let mut file = File::create(&file_path).unwrap();
         write!(file, "{}", content).unwrap();
-        let dm = DepManifest::from_dir(&dir.path(), None);
-        assert_eq!(dm.unwrap().keys(), vec!["django", "gidgethub", "httpx"]);
+        let dm = DepManifest::from_dir(&dir.path(), None).unwrap();
+        assert_eq!(dm.env_marker_active, true);
+        assert_eq!(dm.keys(), vec!["django", "gidgethub", "httpx"]);
     }
 
     #[test]
