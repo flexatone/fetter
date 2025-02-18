@@ -25,6 +25,7 @@ use crate::pyproject::PyProjectInfo;
 use crate::ureq_client::UreqClientLive;
 use crate::util::path_normalize;
 use crate::util::ResultDynError;
+use crate::env_marker::EnvMarkerState;
 
 //------------------------------------------------------------------------------
 static LOCK_PRIORITY: &[&str] = &[
@@ -92,7 +93,7 @@ impl DepSpecOOM {
 #[derive(Debug, Clone)]
 pub(crate) struct DepManifest {
     dep_specs: HashMap<String, DepSpecOOM>,
-    env_marker_active: bool,
+    pub(crate) env_marker_active: bool,
 }
 
 impl DepManifest {
@@ -346,6 +347,7 @@ impl DepManifest {
         &self,
         package: &Package,
         permit_superset: bool,
+        env_marker_state: Option<&EnvMarkerState>,
     ) -> (bool, Option<&DepSpec>) {
         if let Some(dsoom) = self.dep_specs.get(&package.key) {
             match dsoom {
@@ -354,7 +356,15 @@ impl DepManifest {
                     (valid, Some(ds))
                 }
                 DepSpecOOM::Many(dsv) => {
-                    panic!("not implemented")
+                    // Given many dependencies for the same package, we assume for now that we need at least one to pass to say that this package is valid. We might require that one and only one passes.
+                    let ems = env_marker_state.unwrap(); // better way?
+                    for ds in dsv {
+                        if ds.validate_env_marker(ems) {
+                            let valid = ds.validate_package(package);
+                            return (valid, Some(ds));
+                        }
+                    }
+                    (false, None) // we should not get here
                 }
             }
             // let valid = ds.validate_package(package);
@@ -400,16 +410,16 @@ mod tests {
             DepManifest::from_iter(vec!["pk1>=0.2,<0.3", "pk2>=1,<3"].iter()).unwrap();
 
         let p1 = Package::from_dist_info("pk2-2.0.dist-info", None, None).unwrap();
-        assert_eq!(dm.validate(&p1, false).0, true);
+        assert_eq!(dm.validate(&p1, false, None).0, true);
 
         let p2 = Package::from_dist_info("foo-2.0.dist-info", None, None).unwrap();
-        assert_eq!(dm.validate(&p2, false).0, false);
+        assert_eq!(dm.validate(&p2, false, None).0, false);
 
         let p3 = Package::from_dist_info("pk1-0.2.5.dist-info", None, None).unwrap();
-        assert_eq!(dm.validate(&p3, false).0, true);
+        assert_eq!(dm.validate(&p3, false, None).0, true);
 
         let p3 = Package::from_dist_info("pk1-0.3.0.dist-info", None, None).unwrap();
-        assert_eq!(dm.validate(&p3, false).0, false);
+        assert_eq!(dm.validate(&p3, false, None).0, false);
     }
 
     //--------------------------------------------------------------------------
@@ -440,14 +450,14 @@ mod tests {
         assert_eq!(dep_manifest.len(), 2);
 
         let p1 = Package::from_name_version_durl("pk2", "2.1", None).unwrap();
-        assert_eq!(dep_manifest.validate(&p1, false).0, true);
+        assert_eq!(dep_manifest.validate(&p1, false, None).0, true);
         let p2 = Package::from_name_version_durl("pk2", "0.1", None).unwrap();
-        assert_eq!(dep_manifest.validate(&p2, false).0, false);
+        assert_eq!(dep_manifest.validate(&p2, false, None).0, false);
         let p3 = Package::from_name_version_durl("pk1", "0.2.2.999", None).unwrap();
-        assert_eq!(dep_manifest.validate(&p3, false).0, true);
+        assert_eq!(dep_manifest.validate(&p3, false, None).0, true);
 
         let p4 = Package::from_name_version_durl("pk99", "0.2.2.999", None).unwrap();
-        assert_eq!(dep_manifest.validate(&p4, false).0, false);
+        assert_eq!(dep_manifest.validate(&p4, false, None).0, false);
     }
 
     #[test]
@@ -480,13 +490,13 @@ tomlkit==0.12.4
         let dm1 = DepManifest::from_requirements_file(&file_path).unwrap();
         assert_eq!(dm1.len(), 7);
         let p1 = Package::from_name_version_durl("termcolor", "2.2.0", None).unwrap();
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
         let p2 = Package::from_name_version_durl("termcolor", "2.2.1", None).unwrap();
-        assert_eq!(dm1.validate(&p2, false).0, false);
+        assert_eq!(dm1.validate(&p2, false, None).0, false);
         let p3 = Package::from_name_version_durl("text-unicide", "1.3", None).unwrap();
-        assert_eq!(dm1.validate(&p3, false).0, false);
+        assert_eq!(dm1.validate(&p3, false, None).0, false);
         let p3 = Package::from_name_version_durl("text-unidecode", "1.3", None).unwrap();
-        assert_eq!(dm1.validate(&p3, false).0, true);
+        assert_eq!(dm1.validate(&p3, false, None).0, true);
     }
 
     #[test]
@@ -533,21 +543,21 @@ opentelemetry-semantic-conventions==0.45b0
             None,
         )
         .unwrap();
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
         let p2 = Package::from_name_version_durl(
             "opentelemetry-exporter-otlp-proto-grpc",
             "1.24.1",
             None,
         )
         .unwrap();
-        assert_eq!(dm1.validate(&p2, false).0, false);
+        assert_eq!(dm1.validate(&p2, false, None).0, false);
         let p3 = Package::from_name_version_durl(
             "opentelemetry-exporter-otlp-proto-gpc",
             "1.24.0",
             None,
         )
         .unwrap();
-        assert_eq!(dm1.validate(&p3, false).0, false);
+        assert_eq!(dm1.validate(&p3, false, None).0, false);
     }
 
     #[test]
@@ -580,11 +590,11 @@ regex==2024.4.16
         let dm1 = DepManifest::from_requirements_file(&file_path).unwrap();
         assert_eq!(dm1.len(), 9);
         let p1 = Package::from_name_version_durl("regex", "2024.4.16", None).unwrap();
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
         let p2 = Package::from_name_version_durl("regex", "2024.04.16", None).unwrap();
-        assert_eq!(dm1.validate(&p2, false).0, true);
+        assert_eq!(dm1.validate(&p2, false, None).0, true);
         let p2 = Package::from_name_version_durl("regex", "2024.04.17", None).unwrap();
-        assert_eq!(dm1.validate(&p2, false).0, false);
+        assert_eq!(dm1.validate(&p2, false, None).0, false);
     }
 
     #[test]
@@ -1427,7 +1437,7 @@ numpy>= 2.0
         // ds1 has no version information, while p1 does: meaning version passes
         // ds1 has url of git+https://github.com/pypa/packaging.git@cf2cbe2aec28f87c6228a6fb136c27931c9af407
         // DirectURL: git+https://github.com/pypa/packaging.git@cf2cbe2aec28f87c6228a6fb136c27931c9af407
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
     }
 
     #[test]
@@ -1453,7 +1463,7 @@ numpy>= 2.0
         ];
         let dm1 = DepManifest::from_dep_specs(&specs).unwrap();
         assert_eq!(dm1.env_marker_active, false);
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
     }
 
     //--------------------------------------------------------------------------

@@ -440,7 +440,7 @@ where
     let banner = cli.banner;
 
     // do a fresh scan or load a cached scan
-    let sfs = get_scan(
+    let mut sfs = get_scan(
         &cli.exe,
         cli.user_site,
         !quiet,
