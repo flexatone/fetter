@@ -19,13 +19,13 @@ use crate::table::Tableable;
 use crate::ureq_client::UreqClient;
 
 use crate::dep_spec::DepSpec;
+use crate::env_marker::EnvMarkerState;
 use crate::lock_file::LockFile;
 use crate::package::Package;
 use crate::pyproject::PyProjectInfo;
 use crate::ureq_client::UreqClientLive;
 use crate::util::path_normalize;
 use crate::util::ResultDynError;
-use crate::env_marker::EnvMarkerState;
 
 //------------------------------------------------------------------------------
 static LOCK_PRIORITY: &[&str] = &[
@@ -307,34 +307,16 @@ impl DepManifest {
         keys
     }
 
-    // Return an optional DepSpec reference.
-    pub(crate) fn get_dep_spec(&self, key: &str) -> Option<&DepSpec> {
-        if let Some(dsoom) = self.dep_specs.get(key) {
-            match dsoom {
-                DepSpecOOM::One(ds) => Some(ds),
-                DepSpecOOM::Many(dsoom) => {
-                    panic!("here")
-                }
-            }
-        } else {
-            None
-        }
-    }
-
-    // pub(crate) fn get_dep_specs(&self, key: &str) -> Option<impl Iterator<Item = &DepSpec>> {
-    //     self.dep_specs.get(key).map(|dsoom| match dsoom {
-    //         DepSpecOOM::One(ds) => std::iter::once(ds).into_iter(),
-    //         DepSpecOOM::Many(ds_vec) => ds_vec.iter(),
-    //     })
-    // }
-
-    pub(crate) fn get_dep_specs(&self, key: &str) -> Option<std::slice::Iter<'_, DepSpec>> {
+    // Return an optional iterator of DepSpecs for the provided key. It is expected there will only be more than one when env markers are used.
+    pub(crate) fn get_dep_specs(
+        &self,
+        key: &str,
+    ) -> Option<std::slice::Iter<'_, DepSpec>> {
         self.dep_specs.get(key).map(|dsoom| match dsoom {
             DepSpecOOM::One(ds) => std::slice::from_ref(ds).iter(),
             DepSpecOOM::Many(ds_vec) => ds_vec.iter(),
         })
     }
-
 
     // Return all DepSpec in this DepManifest that are not in observed.
     pub(crate) fn get_dep_spec_difference(
@@ -374,6 +356,7 @@ impl DepManifest {
                     // Given many dependencies for the same package, we assume for now that we need at least one to pass to say that this package is valid. We might require that one and only one passes.
                     let ems = env_marker_state.unwrap(); // better way?
                     for ds in dsv {
+                        println!("DepManifest.validate: checking {:?}", ds);
                         if ds.validate_env_marker(ems) {
                             let valid = ds.validate_package(package);
                             return (valid, Some(ds));
@@ -913,24 +896,45 @@ pytest-github-actions-annotate-failures = "==0.1.7"
                 "xattr"
             ]
         );
+
         assert_eq!(
-            dm.get_dep_spec("cachecontrol").unwrap().to_string(),
+            dm.get_dep_specs("cachecontrol")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "cachecontrol==0.14.0"
         );
         assert_eq!(
-            dm.get_dep_spec("dulwich").unwrap().to_string(),
+            dm.get_dep_specs("dulwich")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "dulwich==0.22.1"
         );
         assert_eq!(
-            dm.get_dep_spec("tomli").unwrap().to_string(),
+            dm.get_dep_specs("tomli")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "tomli==2.0.1"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
         assert_eq!(
-            dm.get_dep_spec("importlib_metadata").unwrap().to_string(),
+            dm.get_dep_specs("importlib_metadata")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "importlib-metadata>=4.4"
         );
     }
@@ -1029,7 +1033,11 @@ pytest-github-actions-annotate-failures = "==0.1.7"
             ]
         );
         assert_eq!(
-            dm2.get_dep_spec("coverage").unwrap().to_string(),
+            dm2.get_dep_specs("coverage")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "coverage>=7.2.0"
         );
 
@@ -1052,7 +1060,14 @@ pytest-github-actions-annotate-failures = "==0.1.7"
                 "xattr"
             ]
         );
-        assert_eq!(dm3.get_dep_spec("mypy").unwrap().to_string(), "mypy>=1.8.0");
+        assert_eq!(
+            dm3.get_dep_specs("mypy")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
+            "mypy>=1.8.0"
+        );
         let opts4 = vec!["typing".to_string(), "test".to_string()];
         let dm4 = DepManifest::from_pyproject_file(&file_path, Some(&opts4)).unwrap();
         assert_eq!(
@@ -1176,20 +1191,43 @@ pytest-github-actions-annotate-failures = "==0.1.7"
             ]
         );
         assert_eq!(
-            dm.get_dep_spec("cachecontrol").unwrap().to_string(),
+            dm.get_dep_specs("cachecontrol")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "cachecontrol^0.14.0"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
-        assert_eq!(dm.get_dep_spec("build").unwrap().to_string(), "build^1.2.1");
         assert_eq!(
-            dm.get_dep_spec("dulwich").unwrap().to_string(),
+            dm.get_dep_specs("build")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
+            "build^1.2.1"
+        );
+        assert_eq!(
+            dm.get_dep_specs("dulwich")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "dulwich^0.22.1"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
     }
@@ -1278,24 +1316,49 @@ pytest-github-actions-annotate-failures = "==0.1.7"
             ]
         );
         assert_eq!(
-            dm.get_dep_spec("cachecontrol").unwrap().to_string(),
+            dm.get_dep_specs("cachecontrol")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "cachecontrol^0.14.0"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
-        assert_eq!(dm.get_dep_spec("build").unwrap().to_string(), "build^1.2.1");
         assert_eq!(
-            dm.get_dep_spec("dulwich").unwrap().to_string(),
+            dm.get_dep_specs("build")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
+            "build^1.2.1"
+        );
+        assert_eq!(
+            dm.get_dep_specs("dulwich")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "dulwich^0.22.1"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
         assert_eq!(
-            dm.get_dep_spec("pytest_github_actions_annotate_failures")
+            dm.get_dep_specs("pytest_github_actions_annotate_failures")
+                .unwrap()
+                .next()
                 .unwrap()
                 .to_string(),
             "pytest-github-actions-annotate-failures^0.1.7"
@@ -1380,7 +1443,7 @@ numpy>= 2.0
             DepSpec::from_string("static-frame>2.0,!=1.3").unwrap(),
         ];
         let dm1 = DepManifest::from_dep_specs(&ds).unwrap();
-        let ds1 = dm1.get_dep_spec("requests").unwrap();
+        let ds1 = dm1.get_dep_specs("requests").unwrap().next().unwrap();
         assert_eq!(format!("{}", ds1), "requests>=1.4");
     }
 
@@ -1392,7 +1455,7 @@ numpy>= 2.0
             DepSpec::from_string("static-frame>2.0,!=1.3").unwrap(),
         ];
         let dm1 = DepManifest::from_dep_specs(&ds).unwrap();
-        assert!(dm1.get_dep_spec("foo").is_none());
+        assert!(dm1.get_dep_specs("foo").is_none());
     }
 
     #[test]
@@ -1402,7 +1465,7 @@ numpy>= 2.0
             DepSpec::from_string("Cython==3.0.11").unwrap(),
         ];
         let dm1 = DepManifest::from_dep_specs(&ds).unwrap();
-        let ds1 = dm1.get_dep_spec("cython").unwrap();
+        let ds1 = dm1.get_dep_specs("cython").unwrap().next().unwrap();
         assert_eq!(format!("{}", ds1), "Cython==3.0.11");
     }
 

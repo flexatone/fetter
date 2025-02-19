@@ -376,7 +376,7 @@ impl DepSpec {
             && self.validate_url(package)
     }
 
-    // Given an EnvMarkerState, determine if this DepSpec should be included.
+    // Given an EnvMarkerState, determine if this DepSpec is applied on this envirionment.
     pub(crate) fn validate_env_marker(&self, ems: &EnvMarkerState) -> bool {
         if let Some(me) = &self.env_marker_expr {
             return marker_eval(&self.env_marker, &me, ems).unwrap();

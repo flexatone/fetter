@@ -272,11 +272,11 @@ fn bexp_eval(tokens: &[BExpToken], lookup: &HashMap<String, bool>) -> bool {
         while *index < tokens.len() {
             match &tokens[*index] {
                 BExpToken::Phrase(phrase) => {
-                    println!(
-                        "lookup phrase: {:?} lookup keys: {:?}",
-                        phrase,
-                        lookup.keys()
-                    );
+                    // println!(
+                    //     "lookup phrase: {:?} lookup keys: {:?}",
+                    //     phrase,
+                    //     lookup.keys()
+                    // );
                     result = *lookup.get(phrase).unwrap(); // should never happen
                     *index += 1;
                 }
@@ -321,7 +321,7 @@ pub(crate) fn marker_eval(
     for (exp, eme) in marker_expr {
         marker_values.insert(exp.clone(), ems.eval(eme)?);
     }
-
+    println!("marker_eval: {:?}", marker_values);
     let tokens = bexp_tokenize(marker);
     Ok(bexp_eval(&tokens, &marker_values))
 }

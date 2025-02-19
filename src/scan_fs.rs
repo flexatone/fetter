@@ -423,9 +423,20 @@ impl ScanFS {
                     let exe = self.site_to_exe.get(site).unwrap();
                     let ems = exe_to_ems.get(exe); // do not unwrap as validate() expects Option
                     let (valid, ds) = dm.validate(&package, vf.permit_superset, ems);
+                    if let Some(ds) = ds {
+                        // repeated inserts into a HashSet
+                        ds_keys_matched.insert(&ds.key);
+                    }
+                    if !valid {
+                        records.push(ValidationRecord::new(
+                            Some(package.clone()),
+                            ds.cloned(),
+                            Some(vec![site.clone()]),
+                        ));
+                    }
                 }
-            }
-            else { // env_marker_active is False
+            } else {
+                // env_marker_active is False
                 let (valid, ds) = dm.validate(&package, vf.permit_superset, None);
                 if let Some(ds) = ds {
                     ds_keys_matched.insert(&ds.key);
@@ -448,11 +459,7 @@ impl ScanFS {
             for key in dm.get_dep_spec_difference(&ds_keys_matched) {
                 if let Some(iter) = dm.get_dep_specs(key) {
                     for ds in iter {
-                        records.push(ValidationRecord::new(
-                            None,
-                            Some(ds.clone()),
-                            None,
-                        ));
+                        records.push(ValidationRecord::new(None, Some(ds.clone()), None));
                     }
                 }
             }
@@ -672,7 +679,8 @@ mod tests {
             fp_exe.clone(),
             vec![PathShared::from_path_buf(fp_sp.to_path_buf())],
         );
-        let mut sfs = ScanFS::from_exe_to_sites(exe_to_sites, false, "".to_string()).unwrap();
+        let mut sfs =
+            ScanFS::from_exe_to_sites(exe_to_sites, false, "".to_string()).unwrap();
         assert_eq!(sfs.package_to_sites.len(), 2);
 
         let dm1 = DepManifest::from_iter(vec!["numpy >= 1.19", "foo==3"]).unwrap();
@@ -785,7 +793,8 @@ mod tests {
         )
         .unwrap();
 
-        let mut sfs = ScanFS::from_exe_site_packages(exe.clone(), site, packages).unwrap();
+        let mut sfs =
+            ScanFS::from_exe_site_packages(exe.clone(), site, packages).unwrap();
         let vr = sfs.to_validation_report(
             dm,
             ValidationFlags {
@@ -958,19 +967,26 @@ mod tests {
     fn test_validation_evn_marker_a() {
         let exe = PathBuf::from("python3");
         let site = PathBuf::from("/usr/lib/python3/site-packages");
-        let packages = vec![
-            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
-            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
-        ];
+        let mut packages =
+            vec![
+                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            ];
+        if env::consts::OS == "macos" {
+            packages
+                .push(Package::from_name_version_durl("numpy", "1.19.3", None).unwrap());
+        }
+        if env::consts::OS == "linux" {
+            packages.push(Package::from_name_version_durl("numpy", "2.1", None).unwrap());
+        }
         let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
 
-        // hyphen / underscore are normalized
         let dm = DepManifest::from_iter(
             vec![
-            "numpy==1.19.3; platform_system == 'Darwin'",
-            "numpy==2.1; platform_system == 'Windows'",
-            "static_frame==2.13.0",
-            ].iter(),
+                "numpy==1.19.3; platform_system == 'Darwin'",
+                "numpy==2.1; platform_system == 'Linux'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
         )
         .unwrap();
         let vr = sfs.to_validation_report(
@@ -981,12 +997,10 @@ mod tests {
             },
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
-        // assert_eq!(
-        //     json,
-        //     r#"[{\"package\":null,\"dependency\":\"numpy==1.19.3; platform_system == 'Darwin'\",\"explain\":\"Missing\",\"sites\":null},{\"package\":null,\"dependency\":\"numpy==2.1; platform_system == 'Windows'\",\"explain\":\"Missing\",\"sites\":null},{\"package\":null,\"dependency\":\"static_frame==2.13.0\",\"explain\":\"Missing\",\"sites\":null}]"#
-        // );
-
+        println!("{:?}", json);
+        assert_eq!(json, r#"[]"#);
     }
+
     //--------------------------------------------------------------------------
     #[test]
     fn test_search_a() {
