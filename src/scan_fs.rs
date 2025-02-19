@@ -403,6 +403,7 @@ impl ScanFS {
     //--------------------------------------------------------------------------
 
     /// Validate this scan against the provided DepManifest.
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_validation_report(
         &mut self,
         dm: DepManifest,
@@ -412,7 +413,7 @@ impl ScanFS {
         let mut ds_keys_matched: HashSet<&String> = HashSet::new();
 
         if dm.env_marker_active {
-            let _ = self.load_env_marker_state().unwrap();
+            self.load_env_marker_state().unwrap();
         }
 
         // iterate over found packages in order for better reporting
@@ -578,6 +579,7 @@ impl ScanFS {
         sr.remove(log)
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_purge_invalid(
         &mut self,
         dm: DepManifest,

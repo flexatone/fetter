@@ -301,7 +301,6 @@ impl DepSpec {
         })
     }
 
-    /// If, in evaluating multiple sources of DepSpec, we find the same package, this derives a new DepSpec based on (an intersection) of the others.
     // pub(crate) fn from_dep_specs(dep_specs: Vec<&DepSpec>) -> ResultDynError<Self> {
     //     let mut names = HashSet::new();
     //     let mut keys = HashSet::new();
@@ -378,7 +377,7 @@ impl DepSpec {
     // Given an EnvMarkerState, determine if this DepSpec is applied on this envirionment.
     pub(crate) fn validate_env_marker(&self, ems: &EnvMarkerState) -> bool {
         if let Some(me) = &self.env_marker_expr {
-            return marker_eval(&self.env_marker, &me, ems).unwrap();
+            return marker_eval(&self.env_marker, me, ems).unwrap();
         }
         true
     }

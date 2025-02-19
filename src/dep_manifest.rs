@@ -75,8 +75,8 @@ enum DepSpecOOM {
 }
 
 impl DepSpecOOM {
-    /// Converts the current entry into Many if necessary and inserts a new DepSpec
-    fn to_many(self, dep: DepSpec) -> Self {
+    /// Derivces a new enum of Many if necessary and inserts a new DepSpec
+    fn into_many(self, dep: DepSpec) -> Self {
         match self {
             Self::One(existing) => Self::Many(vec![existing, dep]),
             Self::Many(mut vec) => {
@@ -118,7 +118,7 @@ impl DepManifest {
 
             if let Some(dsoom) = dep_specs.remove(&dep_spec.key) {
                 // remove old One dep spec and upgrade it to a Many
-                dep_specs.insert(dep_spec.key.clone(), dsoom.to_many(dep_spec));
+                dep_specs.insert(dep_spec.key.clone(), dsoom.into_many(dep_spec));
             } else {
                 dep_specs.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec));
             }
@@ -140,7 +140,7 @@ impl DepManifest {
 
             if let Some(dsoom) = ds.remove(&dep_spec.key) {
                 // remove old OOM and upgrade it to a Many
-                ds.insert(dep_spec.key.clone(), dsoom.to_many(dep_spec.clone()));
+                ds.insert(dep_spec.key.clone(), dsoom.into_many(dep_spec.clone()));
             } else {
                 ds.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec.clone()));
             }
