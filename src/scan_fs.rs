@@ -446,11 +446,15 @@ impl ScanFS {
             // packages defined in DepSpec but not found
             // NOTE: this is sorted, but not sorted with the other records
             for key in dm.get_dep_spec_difference(&ds_keys_matched) {
-                records.push(ValidationRecord::new(
-                    None,
-                    dm.get_dep_spec(key).cloned(),
-                    None,
-                ));
+                if let Some(iter) = dm.get_dep_specs(key) {
+                    for ds in iter {
+                        records.push(ValidationRecord::new(
+                            None,
+                            Some(ds.clone()),
+                            None,
+                        ));
+                    }
+                }
             }
         }
         ValidationReport { records }
@@ -976,6 +980,12 @@ mod tests {
                 permit_subset: false,
             },
         );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        // assert_eq!(
+        //     json,
+        //     r#"[{\"package\":null,\"dependency\":\"numpy==1.19.3; platform_system == 'Darwin'\",\"explain\":\"Missing\",\"sites\":null},{\"package\":null,\"dependency\":\"numpy==2.1; platform_system == 'Windows'\",\"explain\":\"Missing\",\"sites\":null},{\"package\":null,\"dependency\":\"static_frame==2.13.0\",\"explain\":\"Missing\",\"sites\":null}]"#
+        // );
+
     }
     //--------------------------------------------------------------------------
     #[test]

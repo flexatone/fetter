@@ -321,6 +321,21 @@ impl DepManifest {
         }
     }
 
+    // pub(crate) fn get_dep_specs(&self, key: &str) -> Option<impl Iterator<Item = &DepSpec>> {
+    //     self.dep_specs.get(key).map(|dsoom| match dsoom {
+    //         DepSpecOOM::One(ds) => std::iter::once(ds).into_iter(),
+    //         DepSpecOOM::Many(ds_vec) => ds_vec.iter(),
+    //     })
+    // }
+
+    pub(crate) fn get_dep_specs(&self, key: &str) -> Option<std::slice::Iter<'_, DepSpec>> {
+        self.dep_specs.get(key).map(|dsoom| match dsoom {
+            DepSpecOOM::One(ds) => std::slice::from_ref(ds).iter(),
+            DepSpecOOM::Many(ds_vec) => ds_vec.iter(),
+        })
+    }
+
+
     // Return all DepSpec in this DepManifest that are not in observed.
     pub(crate) fn get_dep_spec_difference(
         &self,
