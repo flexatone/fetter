@@ -1,4 +1,3 @@
-use core::panic;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -130,6 +129,8 @@ impl DepManifest {
         })
     }
 
+    /// Create DepManifest from a Vec of DepSpec; used for testing.
+    #[allow(dead_code)]
     pub(crate) fn from_dep_specs(dep_specs: &Vec<DepSpec>) -> ResultDynError<Self> {
         let mut env_marker_active = false;
         let mut ds: HashMap<String, DepSpecOOM> = HashMap::new();
@@ -383,8 +384,12 @@ impl DepManifest {
                             dep_spec: ds.clone(),
                         });
                     }
-                    DepSpecOOM::Many(ds) => {
-                        panic!("not implemented");
+                    DepSpecOOM::Many(dsv) => {
+                        for ds in dsv {
+                            records.push(DepManifestRecord {
+                                dep_spec: ds.clone(),
+                            });
+                        }
                     }
                 };
             }

@@ -16,6 +16,8 @@ pub(crate) struct EnvMarkerExpr {
 }
 
 impl EnvMarkerExpr {
+    /// Used for testing.
+    #[allow(dead_code)]
     pub fn new(left: &str, operator: &str, right: &str) -> Self {
         Self {
             left: left.to_string(),
@@ -86,7 +88,7 @@ impl EnvMarkerState {
         })
     }
 
-    /// For testing.
+    /// For testing. TODO: make a utility function for tests
     #[allow(dead_code)]
     pub(crate) fn from_sample() -> ResultDynError<Self> {
         Ok(EnvMarkerState {
