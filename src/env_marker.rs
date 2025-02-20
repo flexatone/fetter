@@ -107,20 +107,31 @@ impl EnvMarkerState {
         }
     }
 
-    /// For testing. TODO: make a utility function for tests
+    // Constructor for testing.
     #[allow(dead_code)]
-    pub(crate) fn from_sample() -> ResultDynError<Self> {
-        Ok(EnvMarkerState {
-            os_name: "posix".to_string(),
-            sys_platform: "darwin".to_string(),
-            platform_machine: "arm64".to_string(),
-            platform_python_implementation: "CPython".to_string(),
-            platform_release: "23.1.0".to_string(),
-            platform_system: "Darwin".to_string(),
-            python_version: "3.13".to_string(),
-            python_full_version: "3.13.1".to_string(),
-            implementation_name: "cpython".to_string(),
-        })
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_str(
+        os_name: &str,
+        sys_platform: &str,
+        platform_machine: &str,
+        platform_python_implementation: &str,
+        platform_release: &str,
+        platform_system: &str,
+        python_version: &str,
+        python_full_version: &str,
+        implementation_name: &str,
+    ) -> Self {
+        Self {
+            os_name: os_name.to_string(),
+            sys_platform: sys_platform.to_string(),
+            platform_machine: platform_machine.to_string(),
+            platform_python_implementation: platform_python_implementation.to_string(),
+            platform_release: platform_release.to_string(),
+            platform_system: platform_system.to_string(),
+            python_version: python_version.to_string(),
+            python_full_version: python_full_version.to_string(),
+            implementation_name: implementation_name.to_string(),
+        }
     }
 
     //--------------------------------------------------------------------------
@@ -518,9 +529,16 @@ mod tests {
         assert_eq!(emv.is_ok(), true);
     }
 
+    fn get_ems_darwin() -> EnvMarkerState {
+        EnvMarkerState::from_str(
+            "posix", "darwin", "arm64", "CPython", "23.1.0", "Darwin", "3.13", "3.13.1",
+            "cpython",
+        )
+    }
+
     #[test]
     fn test_emv_eval_a1() {
-        let emv = EnvMarkerState::from_sample().unwrap();
+        let emv = get_ems_darwin();
         let eme1 = EnvMarkerExpr::new("python_version", "<", "3.9");
         assert_eq!(emv.eval(&eme1).unwrap(), false);
         let eme2 = EnvMarkerExpr::new("python_version", ">=", "3.13");
@@ -531,7 +549,7 @@ mod tests {
 
     #[test]
     fn test_emv_eval_a2() {
-        let emv = EnvMarkerState::from_sample().unwrap();
+        let emv = get_ems_darwin();
         let eme1 = EnvMarkerExpr::new("python_full_version", ">", "3.13.0");
         assert_eq!(emv.eval(&eme1).unwrap(), true);
         let eme2 = EnvMarkerExpr::new("python_full_version", ">=", "3.13.3");
@@ -542,7 +560,7 @@ mod tests {
 
     #[test]
     fn test_emv_eval_b() {
-        let emv = EnvMarkerState::from_sample().unwrap();
+        let emv = get_ems_darwin();
         let eme1 = EnvMarkerExpr::new("platform_machine", "in", "arm64");
         assert_eq!(emv.eval(&eme1).unwrap(), true);
         let eme2 = EnvMarkerExpr::new("platform_machine", "==", "arm64");
@@ -553,7 +571,7 @@ mod tests {
 
     #[test]
     fn test_emv_eval_c() {
-        let emv = EnvMarkerState::from_sample().unwrap();
+        let emv = get_ems_darwin();
         let eme1 = EnvMarkerExpr::new("os_name", "in", "posix");
         assert_eq!(emv.eval(&eme1).unwrap(), true);
         let eme2 = EnvMarkerExpr::new("os_name", "==", "posix");
@@ -566,7 +584,7 @@ mod tests {
     #[test]
     fn test_marker_eval_a1() {
         let ds = DepSpec::from_string("foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version >= '3.0'").unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
@@ -576,7 +594,7 @@ mod tests {
     #[test]
     fn test_marker_eval_a2() {
         let ds = DepSpec::from_string("foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version >= '3.15'").unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             false
@@ -586,7 +604,7 @@ mod tests {
     #[test]
     fn test_marker_eval_a3() {
         let ds = DepSpec::from_string("foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version < '3.5' or python_version >= '3.13'").unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
@@ -599,7 +617,7 @@ mod tests {
             "foo >= 3.4 ;sys_platform == 'darwin' and platform_machine == 'arm64'",
         )
         .unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
@@ -609,7 +627,7 @@ mod tests {
     #[test]
     fn test_marker_eval_b2() {
         let ds = DepSpec::from_string("foo >= 3.4;   sys_platform == 'darwin' and platform_machine == 'arm64' and   platform_system   == 'foo' ").unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             false
@@ -619,7 +637,7 @@ mod tests {
     #[test]
     fn test_marker_eval_b3() {
         let ds = DepSpec::from_string("foo >= 3.4;   sys_platform == 'darwin' and platform_machine == 'arm64' and   platform_system   == 'Darwin' ").unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
@@ -629,7 +647,7 @@ mod tests {
     #[test]
     fn test_marker_eval_c1() {
         let ds = DepSpec::from_string("foo >= 3.4;   os_name == 'posix' and platform_python_implementation == 'CPython' and   platform_release  == '23.*' ").unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true
@@ -639,7 +657,7 @@ mod tests {
     #[test]
     fn test_marker_eval_c2() {
         let ds = DepSpec::from_string("foo >= 3.4;   os_name == 'posix' and platform_python_implementation == 'foo' and   platform_release  == '23.*' ").unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             false
@@ -649,7 +667,7 @@ mod tests {
     #[test]
     fn test_marker_eval_c3() {
         let ds = DepSpec::from_string("foo >= 3.4;   os_name == 'posix' and platform_python_implementation == 'CPython' and  implementation_name  == 'cpython' ").unwrap();
-        let ems = EnvMarkerState::from_sample().unwrap();
+        let ems = get_ems_darwin();
         assert_eq!(
             marker_eval(&ds.env_marker, &ds.env_marker_expr.unwrap(), &ems).unwrap(),
             true

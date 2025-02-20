@@ -337,7 +337,7 @@ impl ScanFS {
     //--------------------------------------------------------------------------
 
     // If not set, optionally load EnvMarkerState for each exe
-    pub(crate) fn load_env_marker_state(&mut self, log: bool) -> ResultDynError<()> {
+    pub(crate) fn load_env_marker_state(&mut self, log: bool) {
         if log {
             logger!(module_path!(), "Fetching EnvMarkerState");
         }
@@ -353,7 +353,6 @@ impl ScanFS {
 
             self.exe_to_ems = Some(ems_map);
         }
-        Ok(())
     }
 
     // searching
@@ -421,19 +420,18 @@ impl ScanFS {
         let mut ds_keys_matched: HashSet<&String> = HashSet::new();
 
         if dm.env_marker_active {
-            self.load_env_marker_state(log).unwrap();
+            self.load_env_marker_state(log);
         }
 
         // iterate over found packages in order for better reporting
         for package in self.get_packages() {
-            // For each package, if the DepManifest has env_marker_active, we have to get the EnvMarkerState for the python exe from which this Package came. That means that we hae to get each site package associated with this Package, git the exe for each site package, and then determine if the dependency remains after filtering EnvMarkerState
+            // For each package, if the DepManifest has env_marker_active, we have to get the EnvMarkerState for the python exe from which this Package came. That means that we get each site package associated with this Package, get the exe for each site package, and then determine if the dependency remains after filtering EnvMarkerState
             if let Some(exe_to_ems) = &self.exe_to_ems {
                 for site in self.package_to_sites.get(&package).unwrap() {
                     let exe = self.site_to_exe.get(site).unwrap();
                     let ems = exe_to_ems.get(exe); // do not unwrap as validate() expects Option
                     let (valid, ds) = dm.validate(&package, vf.permit_superset, ems);
                     if let Some(ds) = ds {
-                        // repeated inserts into a HashSet
                         ds_keys_matched.insert(&ds.key);
                     }
                     if !valid {
@@ -463,7 +461,7 @@ impl ScanFS {
             }
         }
         if !vf.permit_subset {
-            // packages defined in DepSpec but not found
+            // if we do not permit_subset, all packages defined in DepSpec but not found are an error
             // NOTE: this is sorted, but not sorted with the other records
             for key in dm.get_dep_spec_difference(&ds_keys_matched) {
                 if let Some(iter) = dm.get_dep_specs(key) {
@@ -1022,6 +1020,79 @@ mod tests {
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
         println!("{:?}", json);
         assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_b() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let mut packages =
+            vec![
+                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            ];
+        packages.push(Package::from_name_version_durl("numpy", "1.19.3", None).unwrap());
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; platform_system == 'Windows'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        if env::consts::OS != "windows" {
+            let vr = sfs.to_validation_report(
+                dm,
+                ValidationFlags {
+                    permit_superset: false,
+                    permit_subset: false,
+                },
+                false,
+            );
+            let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+            println!("{:?}", json);
+            assert_eq!(json, r#"[]"#);
+        }
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let mut packages =
+            vec![
+                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            ];
+        packages.push(Package::from_name_version_durl("numpy", "1.19.3", None).unwrap());
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; platform_system == 'Windows'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        if env::consts::OS != "windows" {
+            let vr = sfs.to_validation_report(
+                dm,
+                ValidationFlags {
+                    permit_superset: false,
+                    permit_subset: false,
+                },
+                false,
+            );
+            let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+            println!("{:?}", json);
+            assert_eq!(json, r#"[]"#);
+        }
     }
 
     //--------------------------------------------------------------------------

@@ -350,12 +350,22 @@ impl DepManifest {
         if let Some(dsoom) = self.dep_specs.get(&package.key) {
             match dsoom {
                 DepSpecOOM::One(ds) => {
-                    let valid = ds.validate_package(package);
+                    // Given one dependency, if relevant for this environment, test, otherwise ignore (pass)
+                    let valid = match env_marker_state {
+                        Some(ems) => {
+                            if ds.validate_env_marker(ems) {
+                                ds.validate_package(package)
+                            } else {
+                                true
+                            }
+                        }
+                        None => ds.validate_package(package),
+                    };
                     (valid, Some(ds))
                 }
                 DepSpecOOM::Many(dsv) => {
-                    // Given many dependencies for the same package, we assume for now that we need at least one to pass to say that this package is valid. We might require that one and only one passes.
-                    let ems = env_marker_state.unwrap(); // better way?
+                    // Given many dependencies for the same package, if one matches this environmetn, test, otherwise pass.
+                    let ems = env_marker_state.unwrap();
                     for ds in dsv {
                         println!("DepManifest.validate: checking {:?}", ds);
                         if ds.validate_env_marker(ems) {
@@ -363,7 +373,9 @@ impl DepManifest {
                             return (valid, Some(ds));
                         }
                     }
-                    (false, None) // we should not get here
+                    println!("DepManifest.validate: checking {:?}", dsv);
+                    // no depspec match for this environment; can return true and any sample depspec; must return one so as to not show up as missing
+                    (true, dsv.iter().next())
                 }
             }
             // let valid = ds.validate_package(package);

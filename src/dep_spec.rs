@@ -991,12 +991,19 @@ mod tests {
     }
 
     //--------------------------------------------------------------------------
+    fn get_ems_darwin() -> EnvMarkerState {
+        EnvMarkerState::from_str(
+            "posix", "darwin", "arm64", "CPython", "23.1.0", "Darwin", "3.13", "3.13.1",
+            "cpython",
+        )
+    }
+
     #[test]
     fn test_dep_spec_validate_env_marker_a1() {
         let input = "foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version >= '3.0'";
         let ds1 = DepSpec::from_string(input).unwrap();
 
-        let em = EnvMarkerState::from_sample().unwrap();
+        let em = get_ems_darwin();
         assert_eq!(ds1.validate_env_marker(&em), true);
     }
 
@@ -1005,7 +1012,7 @@ mod tests {
         let input = "foo >= 3.4 ;(python_version > '2.0' and python_version < '2.7.9') or python_version < '3.12'";
         let ds1 = DepSpec::from_string(input).unwrap();
 
-        let em = EnvMarkerState::from_sample().unwrap();
+        let em = get_ems_darwin();
         assert_eq!(ds1.validate_env_marker(&em), false);
     }
 }
