@@ -200,6 +200,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
 
         let dir = tempdir().unwrap();

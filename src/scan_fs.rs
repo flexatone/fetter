@@ -337,12 +337,20 @@ impl ScanFS {
     //--------------------------------------------------------------------------
 
     // If not set, optionally load EnvMarkerState for each exe
-    pub(crate) fn load_env_marker_state(&mut self) -> ResultDynError<()> {
+    pub(crate) fn load_env_marker_state(&mut self, log: bool) -> ResultDynError<()> {
+        if log {
+            logger!(module_path!(), "Fetching EnvMarkerState");
+        }
         if self.exe_to_ems.is_none() {
-            let mut ems_map = HashMap::new();
-            for exe in self.exe_to_sites.keys() {
-                ems_map.insert(exe.clone(), EnvMarkerState::from_exe(exe)?);
-            }
+            let ems_map: HashMap<PathBuf, EnvMarkerState> = self
+                .exe_to_sites
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .into_par_iter()
+                .map(|exe| (exe.clone(), EnvMarkerState::from_exe(&exe).unwrap()))
+                .collect();
+
             self.exe_to_ems = Some(ems_map);
         }
         Ok(())
@@ -407,12 +415,13 @@ impl ScanFS {
         &mut self,
         dm: DepManifest,
         vf: ValidationFlags,
+        log: bool,
     ) -> ValidationReport {
         let mut records: Vec<ValidationRecord> = Vec::new();
         let mut ds_keys_matched: HashSet<&String> = HashSet::new();
 
         if dm.env_marker_active {
-            self.load_env_marker_state().unwrap();
+            self.load_env_marker_state(log).unwrap();
         }
 
         // iterate over found packages in order for better reporting
@@ -585,7 +594,7 @@ impl ScanFS {
         vf: ValidationFlags,
         log: bool,
     ) -> io::Result<()> {
-        let vr = self.to_validation_report(dm, vf);
+        let vr = self.to_validation_report(dm, vf, false);
         let packages: Vec<Package> = vr
             .records
             .iter()
@@ -692,6 +701,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(invalid1.len(), 0);
 
@@ -702,6 +712,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(invalid2.len(), 1);
     }
@@ -748,6 +759,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr.len(), 0);
     }
@@ -772,6 +784,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
 
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -802,6 +815,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(sfs.exe_to_sites.get(&exe).unwrap()[0].strong_count(), 8);
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -830,6 +844,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
         assert_eq!(
@@ -859,6 +874,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr.len(), 0);
     }
@@ -883,6 +899,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr.len(), 1);
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -907,6 +924,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr1.len(), 1);
         let json = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
@@ -921,6 +939,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr2.len(), 0);
     }
@@ -945,6 +964,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         let json = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
         assert_eq!(
@@ -958,6 +978,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: true,
             },
+            false,
         );
         assert_eq!(vr2.len(), 0);
     }
@@ -996,6 +1017,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
         println!("{:?}", json);

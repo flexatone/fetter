@@ -518,6 +518,7 @@ where
                     permit_superset,
                     permit_subset,
                 },
+                log,
             );
             // we only print the banner on failure for now
             if vr.len() > 0 && banner.is_some() {

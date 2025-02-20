@@ -62,30 +62,49 @@ enum EvalType {
 
 impl EnvMarkerState {
     pub(crate) fn from_exe(executable: &Path) -> ResultDynError<Self> {
-        let output = Command::new(executable)
+        match Command::new(executable)
             .arg("-S") // disable site on startup
             .arg("-c")
             .arg(PY_ENV_MARKERS)
-            .output()?;
-
-        let mut lines = std::str::from_utf8(&output.stdout)?
-            .trim()
-            .lines()
-            .map(String::from);
-
-        Ok(EnvMarkerState {
-            os_name: lines.next().ok_or("Missing os_name")?,
-            sys_platform: lines.next().ok_or("Missing sys_platform")?,
-            platform_machine: lines.next().ok_or("Missing platform_machine")?,
-            platform_python_implementation: lines
-                .next()
-                .ok_or("Missing platform_python_implementation")?,
-            platform_release: lines.next().ok_or("Missing platform_release")?,
-            platform_system: lines.next().ok_or("Missing platform_system")?,
-            python_version: lines.next().ok_or("Missing python_version")?,
-            python_full_version: lines.next().ok_or("Missing python_full_version")?,
-            implementation_name: lines.next().ok_or("Missing implementation_name")?,
-        })
+            .output()
+        {
+            Ok(output) => {
+                let mut lines = std::str::from_utf8(&output.stdout)
+                    .expect("Failed to convert to UTF-8")
+                    .trim()
+                    .lines()
+                    .map(String::from);
+                Ok(EnvMarkerState {
+                    os_name: lines.next().ok_or("Missing os_name")?,
+                    sys_platform: lines.next().ok_or("Missing sys_platform")?,
+                    platform_machine: lines.next().ok_or("Missing platform_machine")?,
+                    platform_python_implementation: lines
+                        .next()
+                        .ok_or("Missing platform_python_implementation")?,
+                    platform_release: lines.next().ok_or("Missing platform_release")?,
+                    platform_system: lines.next().ok_or("Missing platform_system")?,
+                    python_version: lines.next().ok_or("Missing python_version")?,
+                    python_full_version: lines
+                        .next()
+                        .ok_or("Missing python_full_version")?,
+                    implementation_name: lines
+                        .next()
+                        .ok_or("Missing implementation_name")?,
+                })
+            }
+            Err(_) => Ok(EnvMarkerState {
+                os_name: "Missing os_name".to_string(),
+                sys_platform: "Missing sys_platform".to_string(),
+                platform_machine: "Missing platform_machine".to_string(),
+                platform_python_implementation: "Missing platform_python_implementation"
+                    .to_string(),
+                platform_release: "Missing platform_release".to_string(),
+                platform_system: "Missing platform_system".to_string(),
+                python_version: "Missing python_version".to_string(),
+                python_full_version: "Missing python_full_version".to_string(),
+                implementation_name: "Missing implementation_name".to_string(),
+            }),
+        }
     }
 
     /// For testing. TODO: make a utility function for tests
