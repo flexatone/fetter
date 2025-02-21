@@ -1046,7 +1046,6 @@ mod tests {
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
-        println!("{:?}", json);
         assert_eq!(json, r#"[]"#);
     }
 
@@ -1080,12 +1079,160 @@ mod tests {
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
-        println!("{:?}", json);
         assert_eq!(
             json,
             r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
         );
     }
+
+    #[test]
+    fn test_validation_evn_marker_b2() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[]"#
+        );
+    }
+
+
+    #[test]
+    fn test_validation_evn_marker_b3() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0; python_version >= '3.0'",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[]"#
+        );
+    }
+
+
+    #[test]
+    fn test_validation_evn_marker_b4() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0; python_version >= '20.0'",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]},{"package":"static-frame-2.13.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_b5() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0; python_version >= '20.0'",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: true,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]},{"package":"static-frame-2.13.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+
+
 
     #[test]
     fn test_validation_evn_marker_c() {
@@ -1119,7 +1266,6 @@ mod tests {
                 false,
             );
             let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
-            println!("{:?}", json);
             assert_eq!(json, r#"[]"#);
         }
     }

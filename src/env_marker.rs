@@ -353,7 +353,6 @@ pub(crate) fn marker_eval(
     for (exp, eme) in marker_expr {
         marker_values.insert(exp.clone(), ems.eval(eme)?);
     }
-    println!("marker_eval: {:?}", marker_values);
     let tokens = bexp_tokenize(marker);
     Ok(bexp_eval(&tokens, &marker_values))
 }
@@ -444,7 +443,6 @@ mod tests {
                 .collect();
 
         let tokens = bexp_tokenize(expression);
-        println!("{:?}", tokens);
         let result = bexp_eval(&tokens, &lookup);
         assert_eq!(result, true);
     }
@@ -478,7 +476,6 @@ mod tests {
         .collect();
 
         let tokens = bexp_tokenize(expression);
-        println!("{:?}", tokens);
         let result = bexp_eval(&tokens, &lookup);
         assert_eq!(result, true);
     }
@@ -498,7 +495,6 @@ mod tests {
         .collect();
 
         let tokens = bexp_tokenize(expression);
-        println!("{:?}", tokens);
         let result = bexp_eval(&tokens, &lookup);
         assert_eq!(result, false);
     }
@@ -516,7 +512,6 @@ mod tests {
         .collect();
 
         let tokens = bexp_tokenize(expression);
-        println!("{:?}", tokens);
         let result = bexp_eval(&tokens, &lookup);
         assert_eq!(result, false);
     }
