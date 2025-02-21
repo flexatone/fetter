@@ -1082,7 +1082,10 @@ mod tests {
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
         println!("{:?}", json);
-        assert_eq!(json, r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#);
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
     }
 
     #[test]
