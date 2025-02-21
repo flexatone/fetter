@@ -183,7 +183,7 @@ To run `fetter validate` with `pre-commit`, add the following to your `.pre-comm
 ```yaml
 repos:
 - repo: https://github.com/fetter-io/fetter-rs
-  rev: v1.5.0
+  rev: v1.6.0
   hooks:
     - id: fetter-validate
       args: [--bound, {FILE}, --superset, --subset, display, --code, 3]
@@ -199,7 +199,7 @@ To run `fetter audit` with `pre-commit`, add the following to your `.pre-commit-
 ```yaml
 repos:
 - repo: https://github.com/fetter-io/fetter-rs
-  rev: v1.5.0
+  rev: v1.6.0
   hooks:
     - id: fetter-audit
 ```
@@ -350,11 +350,13 @@ repos:
 
 ## What is New in Fetter
 
-### 1.6.0-dev
+### 1.6.0
 
 Better file path validation and error reporting.
 
 Limit `site-install` and `site-uninstall` to only operate on single-Python environment selections.
+
+Support for nearly all dependency environment markers.
 
 
 ### 1.5.0
