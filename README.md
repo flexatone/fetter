@@ -23,6 +23,7 @@ Additionally, `fetter` can configure a virtual environment to validate package a
 
 * 🔎 System Scanning: Finds Python packages across system environments.
 * ⚖️ Package Validation: Checks installed packages against requirements.txt, pyproject.toml, or lock files created by `uv`, `poetry`, `pipenv`, or `pip-tools` that are sourced locally, via URLs, or via `git` repositories.
+* 🔒 Locked & Reproducible Environments: Automatically validate packages against a lock file before every Python run.
 * 🛡️ Vulnerability Audit: Scans packages for security vulnerabilites in the Open Source Vulnerability database.
 * ⚙️ CI Integration: Validate and audit with `pre-commit` [hooks](#Using-fetter-with-pre-commit).
 * 🚀 Fast: Multi-threaded Rust implementation.
@@ -33,7 +34,7 @@ Additionally, `fetter` can configure a virtual environment to validate package a
 
 
 
-## Installing `fetter`
+## Installing the `fetter` Command Line Application
 
 While available as a pure Rust binary ([crates](https://crates.io/crates/fetter)), `fetter` is easily installed via a Python package ([pypi](https://pypi.org/project/fetter)):
 
@@ -51,7 +52,7 @@ $ fetter --version
 
 
 
-## Using `fetter` from the command line
+## Using `fetter` from the Command Line
 
 For complete command-line documentation, see [CLI Documentation](#Command-Line-Interface-Documentation).
 
@@ -165,7 +166,33 @@ For additional discussion and examples of `fetter` commands and functionality, s
 
 
 
-## Using `fetter` with pre-commit
+
+## Installing Automatic Environment Validation
+
+The `fetter` `site-install` command can be used to configure a Python environment to automatically perform pre-run validation against a requirements.txt, pyproject.toml, or lock file created by `uv`, `poetry`, `pipenv`, or `pip-tools`. Once installed, packages will be validated before every Python execution, warning or optionally exiting if the environment is invalid.
+
+The `site-install` command takes the same arguments as `validate`. Automatic validation is implemented by installing a special ".pth" file in the virtual environment associated with the provided Python executable.
+
+For example, the following command will validate packages installed for the currently available `python3` against a "requirement.txt" lock file and issue warnings:
+
+```shell
+$ fetter -e python3 site-install --bound requirements.txt --superset
+```
+
+For stronger control, the `exit` subcommand can be added to force process termination on validation errors.
+
+```shell
+$ fetter -e python3 site-install --bound requirements.txt --superset exit
+```
+
+To uninstall automatic environment validation, run `site-uninstall` with the same Python executable:
+
+```shell
+$ fetter -e python3 site-uninstall
+```
+
+
+## Using `fetter` with `pre-commit`
 
 Two `fetter` commands can be run via [pre-commit](https://pre-commit.com/) hooks for continuous integration of Python package controls.
 
@@ -206,7 +233,7 @@ repos:
 
 
 
-## Command-Line-Interface Documentation
+## Command Line Interface Documentation
 
 ### Global Options
 
@@ -276,7 +303,7 @@ repos:
 
 ### Command: `fetter site-install`
 
-- Description: Install in site-packages automatic validation checks on every Python run.
+- Description: Install automatic validation checks on every Python run.
 - Options
   - `--bound, -b <FILE>`: Path or URL to the file containing bound requirements, which can be a requirements.txt, pyproject.toml or a lock file created by `uv`, `poetry`, `pipenv`, or `pip-tools`.
   - `--bound-options <OPTIONS>`: Names of additional optional dependency groups.
@@ -290,7 +317,7 @@ repos:
 
 ### Command: `fetter site-uninstall`
 
-- Description: Uninstall from site-packages automatic validation checks.
+- Description: Uninstall automatic validation checks.
 
 ### Command: `fetter audit`
 
