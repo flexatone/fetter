@@ -18,6 +18,7 @@ use crate::table::Tableable;
 use crate::ureq_client::UreqClient;
 
 use crate::dep_spec::DepSpec;
+use crate::env_marker::EnvMarkerState;
 use crate::lock_file::LockFile;
 use crate::package::Package;
 use crate::pyproject::PyProjectInfo;
@@ -65,51 +66,89 @@ impl Tableable<DepManifestRecord> for DepManifestReport {
 }
 
 //------------------------------------------------------------------------------
+
+/// DepSpecOneOrMany
+#[derive(Debug, Clone)]
+enum DepSpecOOM {
+    One(DepSpec),
+    Many(Vec<DepSpec>),
+}
+
+impl DepSpecOOM {
+    /// Derivces a new enum of Many if necessary and inserts a new DepSpec
+    fn into_many(self, dep: DepSpec) -> Self {
+        match self {
+            Self::One(existing) => Self::Many(vec![existing, dep]),
+            Self::Many(mut vec) => {
+                vec.push(dep);
+                Self::Many(vec)
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
 // A DepManifest is a requirements listing, implemented as HashMap for quick lookup by package name.
 #[derive(Debug, Clone)]
 pub(crate) struct DepManifest {
-    dep_specs: HashMap<String, DepSpec>,
+    dep_specs: HashMap<String, DepSpecOOM>,
+    pub(crate) env_marker_active: bool,
 }
 
 impl DepManifest {
     //--------------------------------------------------------------------------
     // constructors from internal structs
 
+    /// Core constructor that all constructors must delegate to.
     pub(crate) fn from_iter<I, S>(ds_iter: I) -> ResultDynError<Self>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let mut dep_specs = HashMap::new();
+        let mut env_marker_active = false;
+        let mut dep_specs: HashMap<String, DepSpecOOM> = HashMap::new();
+
         for line in ds_iter {
             let spec = line.as_ref().trim();
             if spec.is_empty() {
                 continue;
             }
             let dep_spec = DepSpec::from_string(spec)?;
-            if dep_specs.contains_key(&dep_spec.key) {
-                return Err(
-                    format!("Duplicate package key found: {}", dep_spec.key).into()
-                );
+            env_marker_active |= !dep_spec.env_marker.is_empty();
+
+            if let Some(dsoom) = dep_specs.remove(&dep_spec.key) {
+                // remove old One dep spec and upgrade it to a Many
+                dep_specs.insert(dep_spec.key.clone(), dsoom.into_many(dep_spec));
+            } else {
+                dep_specs.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec));
             }
-            dep_specs.insert(dep_spec.key.clone(), dep_spec);
         }
-        Ok(DepManifest { dep_specs })
+        Ok(DepManifest {
+            dep_specs,
+            env_marker_active,
+        })
     }
 
+    /// Create DepManifest from a Vec of DepSpec; used for testing.
+    #[allow(dead_code)]
     pub(crate) fn from_dep_specs(dep_specs: &Vec<DepSpec>) -> ResultDynError<Self> {
-        let mut ds: HashMap<String, DepSpec> = HashMap::new();
+        let mut env_marker_active = false;
+        let mut ds: HashMap<String, DepSpecOOM> = HashMap::new();
+
         for dep_spec in dep_specs {
-            if let Some(dep_spec_prev) = ds.remove(&dep_spec.key) {
-                // remove and replace with composite
-                let dep_spec_new =
-                    DepSpec::from_dep_specs(vec![&dep_spec_prev, &dep_spec])?;
-                ds.insert(dep_spec_new.key.clone(), dep_spec_new);
+            env_marker_active |= !dep_spec.env_marker.is_empty();
+
+            if let Some(dsoom) = ds.remove(&dep_spec.key) {
+                // remove old OOM and upgrade it to a Many
+                ds.insert(dep_spec.key.clone(), dsoom.into_many(dep_spec.clone()));
             } else {
-                ds.insert(dep_spec.key.clone(), dep_spec.clone());
+                ds.insert(dep_spec.key.clone(), DepSpecOOM::One(dep_spec.clone()));
             }
         }
-        Ok(DepManifest { dep_specs: ds })
+        Ok(DepManifest {
+            dep_specs: ds,
+            env_marker_active,
+        })
     }
 
     //--------------------------------------------------------------------------
@@ -118,7 +157,7 @@ impl DepManifest {
     pub(crate) fn from_requirements_file(file_path: &Path) -> ResultDynError<Self> {
         let mut files: VecDeque<PathBuf> = VecDeque::new();
         files.push_back(file_path.to_path_buf());
-        let mut dep_specs = HashMap::new();
+        let mut dep_specs: Vec<String> = Vec::new();
 
         while !files.is_empty() {
             let fp = files.pop_front().unwrap();
@@ -131,21 +170,19 @@ impl DepManifest {
                     continue;
                 }
                 if let Some(post) = t.strip_prefix("-r ") {
-                    files.push_back(file_path.parent().unwrap().join(post.trim()));
-                } else if let Some(post) = t.strip_prefix("--requirement ") {
-                    files.push_back(file_path.parent().unwrap().join(post.trim()));
-                } else {
-                    let ds = DepSpec::from_string(&line)?;
-                    if dep_specs.contains_key(&ds.key) {
-                        return Err(
-                            format!("Duplicate package key found: {}", ds.key).into()
-                        );
+                    if let Some(parent) = fp.parent() {
+                        files.push_back(parent.join(post.trim()));
                     }
-                    dep_specs.insert(ds.key.clone(), ds);
+                } else if let Some(post) = t.strip_prefix("--requirement ") {
+                    if let Some(parent) = fp.parent() {
+                        files.push_back(parent.join(post.trim()));
+                    }
+                } else {
+                    dep_specs.push(line);
                 }
             }
         }
-        Ok(DepManifest { dep_specs })
+        Self::from_iter(dep_specs.iter())
     }
 
     pub(crate) fn from_pyproject(
@@ -271,9 +308,23 @@ impl DepManifest {
         keys
     }
 
-    // Return an optional DepSpec reference.
-    pub(crate) fn get_dep_spec(&self, key: &str) -> Option<&DepSpec> {
-        self.dep_specs.get(key)
+    // fn has_key(&self, key: &str) -> bool {
+    //     self.dep_specs.get(key).is_some()
+    // }
+
+    pub(crate) fn has_package(&self, package: &Package) -> bool {
+        self.dep_specs.contains_key(&package.key)
+    }
+
+    // Return an optional iterator of DepSpecs for the provided key. It is expected there will only be more than one when env markers are used.
+    pub(crate) fn get_dep_specs(
+        &self,
+        key: &str,
+    ) -> Option<std::slice::Iter<'_, DepSpec>> {
+        self.dep_specs.get(key).map(|dsoom| match dsoom {
+            DepSpecOOM::One(ds) => std::slice::from_ref(ds).iter(),
+            DepSpecOOM::Many(ds_vec) => ds_vec.iter(),
+        })
     }
 
     // Return all DepSpec in this DepManifest that are not in observed.
@@ -297,16 +348,57 @@ impl DepManifest {
         self.dep_specs.len()
     }
 
+    // Given a Package, return true or false if it is valid. This is the main public interface for validation.
+    // If we return a DS, it means that have found a DS for this package (which may or may not be validated.
     pub(crate) fn validate(
         &self,
         package: &Package,
         permit_superset: bool,
+        env_marker_state: Option<&EnvMarkerState>,
     ) -> (bool, Option<&DepSpec>) {
-        if let Some(ds) = self.dep_specs.get(&package.key) {
-            let valid = ds.validate_version(&package.version) && ds.validate_url(package);
-            (valid, Some(ds))
+        // if we have DS for this package
+        if let Some(dsoom) = self.dep_specs.get(&package.key) {
+            match dsoom {
+                DepSpecOOM::One(ds) => {
+                    if ds.env_marker.is_empty() {
+                        (ds.validate_package(package), Some(ds))
+                    } else {
+                        // DS has env marker
+                        let ems = env_marker_state.expect("EMS should be loaded");
+                        if ds.validate_env_marker(ems) {
+                            (ds.validate_package(package), Some(ds))
+                        } else {
+                            // if DS not relevant for this environment, do not return it
+                            (permit_superset, None)
+                        }
+                    }
+                }
+                DepSpecOOM::Many(dsv) => {
+                    // Given many for the same package, take the first that matches this environment.
+                    if dsv.iter().any(|ds| !ds.env_marker.is_empty()) {
+                        // if any has env_marker
+                        let ems = env_marker_state.expect("EMS should be loaded");
+                        for ds in dsv {
+                            if ds.validate_env_marker(ems) {
+                                return (ds.validate_package(package), Some(ds));
+                            }
+                        }
+                    } else {
+                        // if multiple DS for package but no env markers: find one that passes
+                        // this could be an invalid state
+                        for ds in dsv {
+                            if ds.validate_package(package) {
+                                return (true, Some(ds));
+                            }
+                        }
+                    }
+                    // no DS match for this environment
+                    (permit_superset, None)
+                }
+            }
         } else {
-            (permit_superset, None) // cannot get a dep spec
+            // no DS for this package; if permit_superset, we deem this as valid; no DS to return
+            (permit_superset, None)
         }
     }
 
@@ -315,10 +407,21 @@ impl DepManifest {
     pub(crate) fn to_dep_manifest_report(&self) -> DepManifestReport {
         let mut records = Vec::new();
         for key in self.keys() {
-            if let Some(ds) = self.dep_specs.get(&key) {
-                records.push(DepManifestRecord {
-                    dep_spec: ds.clone(),
-                });
+            if let Some(dsoom) = self.dep_specs.get(&key) {
+                match dsoom {
+                    DepSpecOOM::One(ds) => {
+                        records.push(DepManifestRecord {
+                            dep_spec: ds.clone(),
+                        });
+                    }
+                    DepSpecOOM::Many(dsv) => {
+                        for ds in dsv {
+                            records.push(DepManifestRecord {
+                                dep_spec: ds.clone(),
+                            });
+                        }
+                    }
+                };
             }
         }
         DepManifestReport { records }
@@ -340,16 +443,16 @@ mod tests {
             DepManifest::from_iter(vec!["pk1>=0.2,<0.3", "pk2>=1,<3"].iter()).unwrap();
 
         let p1 = Package::from_dist_info("pk2-2.0.dist-info", None, None).unwrap();
-        assert_eq!(dm.validate(&p1, false).0, true);
+        assert_eq!(dm.validate(&p1, false, None).0, true);
 
         let p2 = Package::from_dist_info("foo-2.0.dist-info", None, None).unwrap();
-        assert_eq!(dm.validate(&p2, false).0, false);
+        assert_eq!(dm.validate(&p2, false, None).0, false);
 
         let p3 = Package::from_dist_info("pk1-0.2.5.dist-info", None, None).unwrap();
-        assert_eq!(dm.validate(&p3, false).0, true);
+        assert_eq!(dm.validate(&p3, false, None).0, true);
 
         let p3 = Package::from_dist_info("pk1-0.3.0.dist-info", None, None).unwrap();
-        assert_eq!(dm.validate(&p3, false).0, false);
+        assert_eq!(dm.validate(&p3, false, None).0, false);
     }
 
     //--------------------------------------------------------------------------
@@ -380,14 +483,14 @@ mod tests {
         assert_eq!(dep_manifest.len(), 2);
 
         let p1 = Package::from_name_version_durl("pk2", "2.1", None).unwrap();
-        assert_eq!(dep_manifest.validate(&p1, false).0, true);
+        assert_eq!(dep_manifest.validate(&p1, false, None).0, true);
         let p2 = Package::from_name_version_durl("pk2", "0.1", None).unwrap();
-        assert_eq!(dep_manifest.validate(&p2, false).0, false);
+        assert_eq!(dep_manifest.validate(&p2, false, None).0, false);
         let p3 = Package::from_name_version_durl("pk1", "0.2.2.999", None).unwrap();
-        assert_eq!(dep_manifest.validate(&p3, false).0, true);
+        assert_eq!(dep_manifest.validate(&p3, false, None).0, true);
 
         let p4 = Package::from_name_version_durl("pk99", "0.2.2.999", None).unwrap();
-        assert_eq!(dep_manifest.validate(&p4, false).0, false);
+        assert_eq!(dep_manifest.validate(&p4, false, None).0, false);
     }
 
     #[test]
@@ -420,13 +523,13 @@ tomlkit==0.12.4
         let dm1 = DepManifest::from_requirements_file(&file_path).unwrap();
         assert_eq!(dm1.len(), 7);
         let p1 = Package::from_name_version_durl("termcolor", "2.2.0", None).unwrap();
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
         let p2 = Package::from_name_version_durl("termcolor", "2.2.1", None).unwrap();
-        assert_eq!(dm1.validate(&p2, false).0, false);
+        assert_eq!(dm1.validate(&p2, false, None).0, false);
         let p3 = Package::from_name_version_durl("text-unicide", "1.3", None).unwrap();
-        assert_eq!(dm1.validate(&p3, false).0, false);
+        assert_eq!(dm1.validate(&p3, false, None).0, false);
         let p3 = Package::from_name_version_durl("text-unidecode", "1.3", None).unwrap();
-        assert_eq!(dm1.validate(&p3, false).0, true);
+        assert_eq!(dm1.validate(&p3, false, None).0, true);
     }
 
     #[test]
@@ -473,21 +576,21 @@ opentelemetry-semantic-conventions==0.45b0
             None,
         )
         .unwrap();
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
         let p2 = Package::from_name_version_durl(
             "opentelemetry-exporter-otlp-proto-grpc",
             "1.24.1",
             None,
         )
         .unwrap();
-        assert_eq!(dm1.validate(&p2, false).0, false);
+        assert_eq!(dm1.validate(&p2, false, None).0, false);
         let p3 = Package::from_name_version_durl(
             "opentelemetry-exporter-otlp-proto-gpc",
             "1.24.0",
             None,
         )
         .unwrap();
-        assert_eq!(dm1.validate(&p3, false).0, false);
+        assert_eq!(dm1.validate(&p3, false, None).0, false);
     }
 
     #[test]
@@ -520,11 +623,11 @@ regex==2024.4.16
         let dm1 = DepManifest::from_requirements_file(&file_path).unwrap();
         assert_eq!(dm1.len(), 9);
         let p1 = Package::from_name_version_durl("regex", "2024.4.16", None).unwrap();
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
         let p2 = Package::from_name_version_durl("regex", "2024.04.16", None).unwrap();
-        assert_eq!(dm1.validate(&p2, false).0, true);
+        assert_eq!(dm1.validate(&p2, false, None).0, true);
         let p2 = Package::from_name_version_durl("regex", "2024.04.17", None).unwrap();
-        assert_eq!(dm1.validate(&p2, false).0, false);
+        assert_eq!(dm1.validate(&p2, false, None).0, false);
     }
 
     #[test]
@@ -828,24 +931,45 @@ pytest-github-actions-annotate-failures = "==0.1.7"
                 "xattr"
             ]
         );
+
         assert_eq!(
-            dm.get_dep_spec("cachecontrol").unwrap().to_string(),
+            dm.get_dep_specs("cachecontrol")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "cachecontrol==0.14.0"
         );
         assert_eq!(
-            dm.get_dep_spec("dulwich").unwrap().to_string(),
+            dm.get_dep_specs("dulwich")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "dulwich==0.22.1"
         );
         assert_eq!(
-            dm.get_dep_spec("tomli").unwrap().to_string(),
+            dm.get_dep_specs("tomli")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "tomli==2.0.1"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
         assert_eq!(
-            dm.get_dep_spec("importlib_metadata").unwrap().to_string(),
+            dm.get_dep_specs("importlib_metadata")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "importlib-metadata>=4.4"
         );
     }
@@ -944,7 +1068,11 @@ pytest-github-actions-annotate-failures = "==0.1.7"
             ]
         );
         assert_eq!(
-            dm2.get_dep_spec("coverage").unwrap().to_string(),
+            dm2.get_dep_specs("coverage")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "coverage>=7.2.0"
         );
 
@@ -967,7 +1095,14 @@ pytest-github-actions-annotate-failures = "==0.1.7"
                 "xattr"
             ]
         );
-        assert_eq!(dm3.get_dep_spec("mypy").unwrap().to_string(), "mypy>=1.8.0");
+        assert_eq!(
+            dm3.get_dep_specs("mypy")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
+            "mypy>=1.8.0"
+        );
         let opts4 = vec!["typing".to_string(), "test".to_string()];
         let dm4 = DepManifest::from_pyproject_file(&file_path, Some(&opts4)).unwrap();
         assert_eq!(
@@ -1091,20 +1226,43 @@ pytest-github-actions-annotate-failures = "==0.1.7"
             ]
         );
         assert_eq!(
-            dm.get_dep_spec("cachecontrol").unwrap().to_string(),
+            dm.get_dep_specs("cachecontrol")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "cachecontrol^0.14.0"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
-        assert_eq!(dm.get_dep_spec("build").unwrap().to_string(), "build^1.2.1");
         assert_eq!(
-            dm.get_dep_spec("dulwich").unwrap().to_string(),
+            dm.get_dep_specs("build")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
+            "build^1.2.1"
+        );
+        assert_eq!(
+            dm.get_dep_specs("dulwich")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "dulwich^0.22.1"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
     }
@@ -1193,24 +1351,49 @@ pytest-github-actions-annotate-failures = "==0.1.7"
             ]
         );
         assert_eq!(
-            dm.get_dep_spec("cachecontrol").unwrap().to_string(),
+            dm.get_dep_specs("cachecontrol")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "cachecontrol^0.14.0"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
-        assert_eq!(dm.get_dep_spec("build").unwrap().to_string(), "build^1.2.1");
         assert_eq!(
-            dm.get_dep_spec("dulwich").unwrap().to_string(),
+            dm.get_dep_specs("build")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
+            "build^1.2.1"
+        );
+        assert_eq!(
+            dm.get_dep_specs("dulwich")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "dulwich^0.22.1"
         );
         assert_eq!(
-            dm.get_dep_spec("platformdirs").unwrap().to_string(),
+            dm.get_dep_specs("platformdirs")
+                .unwrap()
+                .next()
+                .unwrap()
+                .to_string(),
             "platformdirs>=3.0.0,<5"
         );
         assert_eq!(
-            dm.get_dep_spec("pytest_github_actions_annotate_failures")
+            dm.get_dep_specs("pytest_github_actions_annotate_failures")
+                .unwrap()
+                .next()
                 .unwrap()
                 .to_string(),
             "pytest-github-actions-annotate-failures^0.1.7"
@@ -1295,7 +1478,7 @@ numpy>= 2.0
             DepSpec::from_string("static-frame>2.0,!=1.3").unwrap(),
         ];
         let dm1 = DepManifest::from_dep_specs(&ds).unwrap();
-        let ds1 = dm1.get_dep_spec("requests").unwrap();
+        let ds1 = dm1.get_dep_specs("requests").unwrap().next().unwrap();
         assert_eq!(format!("{}", ds1), "requests>=1.4");
     }
 
@@ -1307,7 +1490,7 @@ numpy>= 2.0
             DepSpec::from_string("static-frame>2.0,!=1.3").unwrap(),
         ];
         let dm1 = DepManifest::from_dep_specs(&ds).unwrap();
-        assert!(dm1.get_dep_spec("foo").is_none());
+        assert!(dm1.get_dep_specs("foo").is_none());
     }
 
     #[test]
@@ -1317,7 +1500,7 @@ numpy>= 2.0
             DepSpec::from_string("Cython==3.0.11").unwrap(),
         ];
         let dm1 = DepManifest::from_dep_specs(&ds).unwrap();
-        let ds1 = dm1.get_dep_spec("cython").unwrap();
+        let ds1 = dm1.get_dep_specs("cython").unwrap().next().unwrap();
         assert_eq!(format!("{}", ds1), "Cython==3.0.11");
     }
 
@@ -1367,7 +1550,7 @@ numpy>= 2.0
         // ds1 has no version information, while p1 does: meaning version passes
         // ds1 has url of git+https://github.com/pypa/packaging.git@cf2cbe2aec28f87c6228a6fb136c27931c9af407
         // DirectURL: git+https://github.com/pypa/packaging.git@cf2cbe2aec28f87c6228a6fb136c27931c9af407
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
     }
 
     #[test]
@@ -1392,7 +1575,8 @@ numpy>= 2.0
             ds1,
         ];
         let dm1 = DepManifest::from_dep_specs(&specs).unwrap();
-        assert_eq!(dm1.validate(&p1, false).0, true);
+        assert_eq!(dm1.env_marker_active, false);
+        assert_eq!(dm1.validate(&p1, false, None).0, true);
     }
 
     //--------------------------------------------------------------------------
@@ -1415,8 +1599,9 @@ dependencies = [
         let file_path = dir.path().join("pyproject.toml");
         let mut file = File::create(&file_path).unwrap();
         write!(file, "{}", content).unwrap();
-        let dm = DepManifest::from_dir(&dir.path(), None);
-        assert_eq!(dm.unwrap().keys(), vec!["django", "gidgethub", "httpx"]);
+        let dm = DepManifest::from_dir(&dir.path(), None).unwrap();
+        assert_eq!(dm.env_marker_active, true);
+        assert_eq!(dm.keys(), vec!["django", "gidgethub", "httpx"]);
     }
 
     #[test]

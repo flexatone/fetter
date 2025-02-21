@@ -19,6 +19,7 @@ use crate::count_report::CountReport;
 use crate::dep_manifest::DepManifest;
 use crate::dep_spec::DepOperator;
 use crate::dep_spec::DepSpec;
+use crate::env_marker::EnvMarkerState;
 use crate::exe_search::find_exe;
 use crate::package::Package;
 use crate::package_match::match_str;
@@ -40,7 +41,6 @@ use crate::util::DURATION_0;
 use crate::validation_report::ValidationFlags;
 use crate::validation_report::ValidationRecord;
 use crate::validation_report::ValidationReport;
-
 //------------------------------------------------------------------------------
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Anchor {
@@ -124,6 +124,12 @@ pub(crate) struct ScanFS {
     pub(crate) exe_to_sites: HashMap<PathBuf, Vec<PathShared>>,
     /// A mapping of Package tp a site package paths
     pub(crate) package_to_sites: HashMap<Package, Vec<PathShared>>,
+    // A mapping of site package to exe paths
+    pub(crate) site_to_exe: HashMap<PathShared, PathBuf>,
+
+    /// Optionally populate EnvMarkerState for all exe, only if env markers are found
+    pub(crate) exe_to_ems: Option<HashMap<PathBuf, EnvMarkerState>>,
+    /// Optionally force usage of user site
     force_usite: bool,
     /// Store the hash of the un-normalized exe inputs for cache lookup.
     exes_hash: String,
@@ -141,10 +147,14 @@ impl Serialize for ScanFS {
         let mut package_to_sites: Vec<_> = self.package_to_sites.iter().collect();
         package_to_sites.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
 
+        let site_to_exe: Vec<_> = self.site_to_exe.iter().collect();
+        // site_to_exe.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+
         // Serialize as tuple of sorted vectors
         let data = (
             &exe_to_sites,
             &package_to_sites,
+            &site_to_exe,
             self.force_usite,
             &self.exes_hash,
         );
@@ -156,6 +166,7 @@ impl Serialize for ScanFS {
 type ScanFSData = (
     Vec<(PathBuf, Vec<PathShared>)>,
     Vec<(Package, Vec<PathShared>)>,
+    Vec<(PathShared, PathBuf)>,
     bool,   // force_usite
     String, // exes hash
 );
@@ -165,15 +176,18 @@ impl<'de> Deserialize<'de> for ScanFS {
     where
         D: Deserializer<'de>,
     {
-        let (exe_to_sites, package_to_sites, force_usite, exes_hash): ScanFSData =
+        let (exe_to_sites, package_to_sites, site_to_exe, force_usite, exes_hash): ScanFSData =
             Deserialize::deserialize(deserializer)?;
 
         let exe_to_sites = exe_to_sites.into_iter().collect();
+        let site_to_exe = site_to_exe.into_iter().collect();
         let package_to_sites = package_to_sites.into_iter().collect();
 
         Ok(ScanFS {
             exe_to_sites,
             package_to_sites,
+            site_to_exe,
+            exe_to_ems: None,
             force_usite,
             exes_hash,
         })
@@ -198,6 +212,11 @@ impl ScanFS {
             })
             .collect::<HashMap<PathShared, Vec<Package>>>();
 
+        let site_to_exe: HashMap<PathShared, PathBuf> = exe_to_sites
+            .iter()
+            .flat_map(|(exe, sites)| sites.iter().map(|site| (site.clone(), exe.clone())))
+            .collect();
+
         let mut package_to_sites: HashMap<Package, Vec<PathShared>> = HashMap::new();
         for (site_package_path, packages) in site_to_packages.iter() {
             for package in packages {
@@ -210,6 +229,8 @@ impl ScanFS {
         Ok(ScanFS {
             exe_to_sites,
             package_to_sites,
+            site_to_exe,
+            exe_to_ems: None,
             force_usite,
             exes_hash,
         })
@@ -289,6 +310,11 @@ impl ScanFS {
         exe_to_sites.insert(exe.clone(), vec![site_shared.clone()]);
         let exes = vec![exe];
 
+        let site_to_exe: HashMap<PathShared, PathBuf> = exe_to_sites
+            .iter()
+            .flat_map(|(exe, sites)| sites.iter().map(|site| (site.clone(), exe.clone())))
+            .collect();
+
         let mut package_to_sites = HashMap::new();
         for package in packages {
             package_to_sites
@@ -301,14 +327,35 @@ impl ScanFS {
         Ok(ScanFS {
             exe_to_sites,
             package_to_sites,
+            site_to_exe,
+            exe_to_ems: None,
             force_usite,
             exes_hash,
         })
     }
 
     //--------------------------------------------------------------------------
-    // searching
 
+    // If not set, optionally load EnvMarkerState for each exe
+    pub(crate) fn load_env_marker_state(&mut self, log: bool) {
+        if log {
+            logger!(module_path!(), "Fetching EnvMarkerState");
+        }
+        if self.exe_to_ems.is_none() {
+            let ems_map: HashMap<PathBuf, EnvMarkerState> = self
+                .exe_to_sites
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .into_par_iter()
+                .map(|exe| (exe.clone(), EnvMarkerState::from_exe(&exe).unwrap()))
+                .collect();
+
+            self.exe_to_ems = Some(ems_map);
+        }
+    }
+
+    // searching
     pub(crate) fn search_by_match(
         &self,
         pattern: &str,
@@ -324,8 +371,6 @@ impl ScanFS {
             .collect();
         matched
     }
-
-    //--------------------------------------------------------------------------
 
     /// Return sorted packages.
     pub(crate) fn get_packages(&self) -> Vec<Package> {
@@ -364,40 +409,97 @@ impl ScanFS {
     //--------------------------------------------------------------------------
 
     /// Validate this scan against the provided DepManifest.
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_validation_report(
-        &self,
+        &mut self,
         dm: DepManifest,
         vf: ValidationFlags,
+        log: bool,
     ) -> ValidationReport {
         let mut records: Vec<ValidationRecord> = Vec::new();
+        // We collect all DS keys matched to package, regardless of if the version matches; we can then (if we do not permit_subset) find all the DS definitions that were not satisfied
         let mut ds_keys_matched: HashSet<&String> = HashSet::new();
+
+        if dm.env_marker_active {
+            self.load_env_marker_state(log);
+        }
 
         // iterate over found packages in order for better reporting
         for package in self.get_packages() {
-            let (valid, ds) = dm.validate(&package, vf.permit_superset);
-            if let Some(ds) = ds {
-                ds_keys_matched.insert(&ds.key);
-            }
-            if !valid {
-                // package should always have defined sites
-                let sites = self.package_to_sites.get(&package).cloned();
-                // ds is an Option type, might be None
-                records.push(ValidationRecord::new(
-                    Some(package), // can take ownership of Package
-                    ds.cloned(),
-                    sites,
-                ));
+            if !dm.has_package(&package) {
+                if !vf.permit_superset {
+                    let sites = self.package_to_sites.get(&package).cloned();
+                    // Add records if package is not in the DM and do not permit superset
+                    records.push(ValidationRecord::new(
+                        Some(package), // can take ownership of Package
+                        None,
+                        sites,
+                    ));
+                }
+                // else do not add record
+            } else if let Some(exe_to_ems) = &self.exe_to_ems {
+                // For each package, if the DepManifest has env_marker_active, we have already loaded EnvMarkerState
+                for site in self.package_to_sites.get(&package).unwrap() {
+                    let exe = self.site_to_exe.get(site).unwrap();
+                    let ems = exe_to_ems.get(exe); // validate() expects Option
+                    let (valid, ds) = dm.validate(&package, vf.permit_superset, ems);
+                    if let Some(ds) = ds {
+                        ds_keys_matched.insert(&ds.key);
+                    }
+                    if !valid {
+                        records.push(ValidationRecord::new(
+                            Some(package.clone()),
+                            ds.cloned(),
+                            Some(vec![site.clone()]),
+                        ));
+                    }
+                }
+            } else {
+                // env_marker_active is False
+                let (valid, ds) = dm.validate(&package, vf.permit_superset, None);
+                if let Some(ds) = ds {
+                    ds_keys_matched.insert(&ds.key);
+                }
+                if !valid {
+                    let sites = self.package_to_sites.get(&package).cloned();
+                    // ds is an Option type, might be None
+                    records.push(ValidationRecord::new(
+                        Some(package), // can take ownership of Package
+                        ds.cloned(),
+                        sites,
+                    ));
+                }
             }
         }
         if !vf.permit_subset {
-            // packages defined in DepSpec but not found
+            // find DS in DM that are not in packages; if any DS has env_marker relevant to the known environmets, report it.
             // NOTE: this is sorted, but not sorted with the other records
             for key in dm.get_dep_spec_difference(&ds_keys_matched) {
-                records.push(ValidationRecord::new(
-                    None,
-                    dm.get_dep_spec(key).cloned(),
-                    None,
-                ));
+                if let Some(iter) = dm.get_dep_specs(key) {
+                    for ds in iter {
+                        // if a DS has an env_marker, that env_marker must be valid for at least one of our exe environents
+                        if !ds.env_marker.is_empty() {
+                            if let Some(exe_to_ems) = &self.exe_to_ems {
+                                if exe_to_ems
+                                    .values()
+                                    .any(|ems| ds.validate_env_marker(ems))
+                                {
+                                    records.push(ValidationRecord::new(
+                                        None,
+                                        Some(ds.clone()),
+                                        None,
+                                    ));
+                                }
+                            }
+                        } else {
+                            records.push(ValidationRecord::new(
+                                None,
+                                Some(ds.clone()),
+                                None,
+                            ));
+                        }
+                    }
+                }
             }
         }
         ValidationReport { records }
@@ -514,13 +616,14 @@ impl ScanFS {
         sr.remove(log)
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_purge_invalid(
-        &self,
+        &mut self,
         dm: DepManifest,
         vf: ValidationFlags,
         log: bool,
     ) -> io::Result<()> {
-        let vr = self.to_validation_report(dm, vf);
+        let vr = self.to_validation_report(dm, vf, false);
         let packages: Vec<Package> = vr
             .records
             .iter()
@@ -615,7 +718,8 @@ mod tests {
             fp_exe.clone(),
             vec![PathShared::from_path_buf(fp_sp.to_path_buf())],
         );
-        let sfs = ScanFS::from_exe_to_sites(exe_to_sites, false, "".to_string()).unwrap();
+        let mut sfs =
+            ScanFS::from_exe_to_sites(exe_to_sites, false, "".to_string()).unwrap();
         assert_eq!(sfs.package_to_sites.len(), 2);
 
         let dm1 = DepManifest::from_iter(vec!["numpy >= 1.19", "foo==3"]).unwrap();
@@ -626,6 +730,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(invalid1.len(), 0);
 
@@ -636,6 +741,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(invalid2.len(), 1);
     }
@@ -675,13 +781,14 @@ mod tests {
         )
         .unwrap();
 
-        let sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
         let vr = sfs.to_validation_report(
             dm,
             ValidationFlags {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr.len(), 0);
     }
@@ -699,13 +806,14 @@ mod tests {
         )
         .unwrap();
 
-        let sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
         let vr = sfs.to_validation_report(
             dm,
             ValidationFlags {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
 
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -728,15 +836,17 @@ mod tests {
         )
         .unwrap();
 
-        let sfs = ScanFS::from_exe_site_packages(exe.clone(), site, packages).unwrap();
+        let mut sfs =
+            ScanFS::from_exe_site_packages(exe.clone(), site, packages).unwrap();
         let vr = sfs.to_validation_report(
             dm,
             ValidationFlags {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
-        assert_eq!(sfs.exe_to_sites.get(&exe).unwrap()[0].strong_count(), 7);
+        assert_eq!(sfs.exe_to_sites.get(&exe).unwrap()[0].strong_count(), 8);
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
         assert_eq!(
             json,
@@ -755,7 +865,7 @@ mod tests {
         ];
         let dm = DepManifest::from_iter(vec!["numpy>2", "flask> 2,<3"].iter()).unwrap();
 
-        let sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
 
         let vr = sfs.to_validation_report(
             dm,
@@ -763,6 +873,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
         assert_eq!(
@@ -779,7 +890,7 @@ mod tests {
             Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
             Package::from_name_version_durl("flask", "1.1.3", None).unwrap(),
         ];
-        let sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
 
         // hyphen / underscore are normalized
         let dm = DepManifest::from_iter(
@@ -792,6 +903,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr.len(), 0);
     }
@@ -803,7 +915,7 @@ mod tests {
             Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
             Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
         ];
-        let sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
 
         // hyphen / underscore are normalized
         let dm = DepManifest::from_iter(
@@ -816,6 +928,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr.len(), 1);
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -832,7 +945,7 @@ mod tests {
             Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
             Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
         ];
-        let sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
         let dm = DepManifest::from_iter(vec!["numpy==1.19.3"].iter()).unwrap();
         let vr1 = sfs.to_validation_report(
             dm.clone(),
@@ -840,6 +953,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr1.len(), 1);
         let json = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
@@ -854,6 +968,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            false,
         );
         assert_eq!(vr2.len(), 0);
     }
@@ -865,7 +980,7 @@ mod tests {
             Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
             Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
         ];
-        let sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
 
         // hyphen / underscore are normalized
         let dm = DepManifest::from_iter(
@@ -878,6 +993,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
         let json = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
         assert_eq!(
@@ -891,8 +1007,526 @@ mod tests {
                 permit_superset: false,
                 permit_subset: true,
             },
+            false,
         );
         assert_eq!(vr2.len(), 0);
+    }
+
+    //--------------------------------------------------------------------------
+
+    #[test]
+    fn test_validation_evn_marker_a() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let mut packages =
+            vec![
+                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            ];
+        if env::consts::OS == "macos" {
+            packages
+                .push(Package::from_name_version_durl("numpy", "1.19.3", None).unwrap());
+        }
+        if env::consts::OS == "linux" {
+            packages.push(Package::from_name_version_durl("numpy", "2.1", None).unwrap());
+        }
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; platform_system == 'Darwin'",
+                "numpy==2.1; platform_system == 'Linux'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_b1() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_b2() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_b3() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0; python_version >= '3.0'",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_b4() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0; python_version >= '20.0'",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]},{"package":"static-frame-2.13.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_b5() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0; python_version >= '20.0'",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: true,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]},{"package":"static-frame-2.13.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_b6() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // this DM means that we only need NumPy if Python < 3,
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.19.3; python_version < '3.0'",
+                "static_frame==2.13.0; python_version >= '20.0'",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: true,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c1() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==1.19.3; python_version > '3.0' and python_version < '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c2() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==1.19.1; python_version > '3.0' and python_version < '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-1.19.3","dependency":"numpy==1.19.1; python_version > '3.0' and python_version < '20'","explain":"Misdefined","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c3() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages =
+            vec![
+                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==1.19.1; python_version > '3.0' and python_version < '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":null,"dependency":"numpy==1.19.1; python_version > '3.0' and python_version < '20'","explain":"Missing","sites":null}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c4() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages =
+            vec![
+                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==1.19.1; python_version > '3.0' and python_version < '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: true,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c5() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-1.19.3","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c6() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_d1() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec!["numpy==1.2", "numpy==2.0", "static_frame==2.13.0"].iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_d2() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.2", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec!["numpy==1.2", "numpy==2.0", "static_frame==2.13.0"].iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":null,"dependency":"numpy==1.2","explain":"Missing","sites":null},{"package":null,"dependency":"numpy==2.0","explain":"Missing","sites":null}]"#
+        );
     }
 
     //--------------------------------------------------------------------------
@@ -937,7 +1571,7 @@ mod tests {
         ];
         let sfs = ScanFS::from_exe_site_packages(exe, site, packages.clone()).unwrap();
         let json = serde_json::to_string(&sfs).unwrap();
-        assert_eq!(json, "[[[\"/usr/bin/python3\",[\"/usr/lib/python3/site-packages\"]]],[[{\"name\":\"flask\",\"key\":\"flask\",\"version\":\"1.1.3\",\"direct_url\":null},[\"/usr/lib/python3/site-packages\"]],[{\"name\":\"numpy\",\"key\":\"numpy\",\"version\":\"1.19.3\",\"direct_url\":null},[\"/usr/lib/python3/site-packages\"]],[{\"name\":\"static-frame\",\"key\":\"static_frame\",\"version\":\"2.13.0\",\"direct_url\":null},[\"/usr/lib/python3/site-packages\"]]],false,\"35cc8bbf5f965f99f2ed716a23e0cfbb70b8977ba65e837708e960fc13e51da2\"]");
+        assert_eq!(json, "[[[\"/usr/bin/python3\",[\"/usr/lib/python3/site-packages\"]]],[[{\"name\":\"flask\",\"key\":\"flask\",\"version\":\"1.1.3\",\"direct_url\":null},[\"/usr/lib/python3/site-packages\"]],[{\"name\":\"numpy\",\"key\":\"numpy\",\"version\":\"1.19.3\",\"direct_url\":null},[\"/usr/lib/python3/site-packages\"]],[{\"name\":\"static-frame\",\"key\":\"static_frame\",\"version\":\"2.13.0\",\"direct_url\":null},[\"/usr/lib/python3/site-packages\"]]],[[\"/usr/lib/python3/site-packages\",\"/usr/bin/python3\"]],false,\"35cc8bbf5f965f99f2ed716a23e0cfbb70b8977ba65e837708e960fc13e51da2\"]");
 
         let sfsd: ScanFS = serde_json::from_str(&json).unwrap();
         assert_eq!(sfsd.exe_to_sites.len(), 1);
@@ -991,18 +1625,24 @@ mod tests {
         exe_to_sites.insert(exe1.clone(), vec![site_shared1.clone()]);
         exe_to_sites.insert(exe2.clone(), vec![site_shared2.clone()]);
 
-        let exes = vec![exe1, exe2];
+        let exes = vec![exe1.clone(), exe2.clone()];
 
         let mut package_to_sites = HashMap::new();
         package_to_sites.insert(p1, vec![site_shared1.clone()]);
         package_to_sites.insert(p2, vec![site_shared1.clone()]);
-        package_to_sites.insert(p3, vec![site_shared1.clone(), site_shared2]);
+        package_to_sites.insert(p3, vec![site_shared1.clone(), site_shared2.clone()]);
+
+        let mut site_to_exe = HashMap::new();
+        site_to_exe.insert(site_shared1.clone(), exe1.clone());
+        site_to_exe.insert(site_shared2.clone(), exe2.clone());
 
         let force_usite = false;
         let exes_hash = hash_paths(&exes, force_usite);
         let sfs = ScanFS {
             exe_to_sites,
             package_to_sites,
+            site_to_exe,
+            exe_to_ems: None,
             force_usite,
             exes_hash,
         };

@@ -187,7 +187,7 @@ mod tests {
             Package::from_name_version_durl("flask", "1.2", None).unwrap(),
             Package::from_name_version_durl("packaging", "24.1", None).unwrap(),
         ];
-        let sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
 
         // hyphen / underscore are normalized
         let dm = DepManifest::from_iter(
@@ -200,6 +200,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            false,
         );
 
         let dir = tempdir().unwrap();

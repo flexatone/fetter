@@ -158,26 +158,6 @@ mod tests {
 
     use crate::ureq_client::UreqClientMock;
 
-    // #[test]
-    // fn test_vuln_live() {
-    //     use crate::ureq_client::UreqClientLive;
-
-    //     let vuln_ids = vec![
-    //         "GHSA-48cq-79qq-6f7x".to_string(),
-    //         "GHSA-pmv9-3xqp-8w42".to_string(),
-    //     ];
-
-    //     let result_map = query_osv_vulns(&UreqClientLive, &vuln_ids);
-
-    //     for (vuln_id, vuln) in result_map {
-    //         println!("Vuln: {}", vuln_id);
-    //         println!("Summary: {:?}", vuln.summary);
-    //         println!("References: {}", vuln.references.get_prime());
-    //         // println!("Severity: {}", vuln.severity.unwrap().get_prime());
-    //         println!();
-    //     }
-    // }
-
     #[test]
     fn test_vuln_a() {
         let vuln_ids = vec!["GHSA-48cq-79qq-6f7x".to_string()];

@@ -440,7 +440,7 @@ where
     let banner = cli.banner;
 
     // do a fresh scan or load a cached scan
-    let sfs = get_scan(
+    let mut sfs = get_scan(
         &cli.exe,
         cli.user_site,
         !quiet,
@@ -508,6 +508,7 @@ where
             superset,
             subcommands,
         }) => {
+            // a DepManifest can be specialized for different python versions; if any DepManifest constituents have
             let dm = DepManifest::from_path_or_url(bound, bound_options.as_ref())?;
             let permit_superset = *superset;
             let permit_subset = *subset;
@@ -517,6 +518,7 @@ where
                     permit_superset,
                     permit_subset,
                 },
+                log,
             );
             // we only print the banner on failure for now
             if vr.len() > 0 && banner.is_some() {

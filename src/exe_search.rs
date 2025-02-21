@@ -113,7 +113,6 @@ fn find_exe_inner(
                         let path = entry.unwrap().path();
                         if recurse && path.is_dir() && !is_symlink(&path) {
                             // recurse
-                            // println!("recursing: {:?}", path);
                             paths.extend(find_exe_inner(&path, exclude_paths, recurse));
                         } else if is_python_exe(&path) {
                             paths.push(path);
