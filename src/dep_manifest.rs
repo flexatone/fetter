@@ -374,23 +374,30 @@ impl DepManifest {
                     }
                 }
                 DepSpecOOM::Many(dsv) => {
-                    // Given many dependencies for the same package, if one matches this environmetn, test, otherwise pass.
-                    let ems = env_marker_state.unwrap();
-                    for ds in dsv {
-                        println!("DepManifest.validate: checking {:?}", ds);
-                        if ds.validate_env_marker(ems) {
-                            let valid = ds.validate_package(package);
-                            return (valid, Some(ds));
+                    // Given many for the same package, take the first that matches this environment.
+                    if dsv.iter().any(|ds| !ds.env_marker.is_empty()) {
+                        // if any has env_marker
+                        let ems = env_marker_state.expect("EMS should be loaded");
+                        for ds in dsv {
+                            if ds.validate_env_marker(ems) {
+                                return (ds.validate_package(package), Some(ds));
+                            }
+                        }
+                    } else {
+                        // if multiple DS for package but no env markers: find one that passes
+                        // this could be an invalid state
+                        for ds in dsv {
+                            if ds.validate_package(package) {
+                                return (true, Some(ds));
+                            }
                         }
                     }
-                    println!("DepManifest.validate: checking {:?}", dsv);
-                    // no depspec match for this environment; can return true and any sample depspec; must return one so as to not show up as missing
-                    (true, dsv.iter().next())
+                    // no DS match for this environment
+                    (permit_superset, None)
                 }
             }
-            // let valid = ds.validate_package(package);
         } else {
-            // no DS for this package; if permit_superset, we deem this as valid; we cannot return a DS
+            // no DS for this package; if permit_superset, we deem this as valid; no DS to return
             (permit_superset, None)
         }
     }

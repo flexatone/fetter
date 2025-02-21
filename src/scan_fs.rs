@@ -1260,20 +1260,20 @@ mod tests {
     }
 
     #[test]
-    fn test_validation_evn_marker_c() {
+    fn test_validation_evn_marker_c1() {
         let exe = PathBuf::from("python3");
         let site = PathBuf::from("/usr/lib/python3/site-packages");
-        let mut packages =
-            vec![
-                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
-            ];
-        packages.push(Package::from_name_version_durl("numpy", "1.19.3", None).unwrap());
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+        ];
 
         let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
 
         let dm = DepManifest::from_iter(
             vec![
-                "numpy==1.19.3; platform_system == 'Windows'",
+                "numpy==1.2; python_version > '20'",
+                "numpy==1.19.3; python_version > '3.0' and python_version < '20'",
                 "numpy==2.0; python_version < '3.0'",
                 "static_frame==2.13.0",
             ]
@@ -1281,18 +1281,252 @@ mod tests {
         )
         .unwrap();
 
-        if env::consts::OS != "windows" {
-            let vr = sfs.to_validation_report(
-                dm,
-                ValidationFlags {
-                    permit_superset: false,
-                    permit_subset: false,
-                },
-                false,
-            );
-            let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
-            assert_eq!(json, r#"[]"#);
-        }
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c2() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==1.19.1; python_version > '3.0' and python_version < '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-1.19.3","dependency":"numpy==1.19.1; python_version > '3.0' and python_version < '20'","explain":"Misdefined","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c3() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages =
+            vec![
+                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==1.19.1; python_version > '3.0' and python_version < '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":null,"dependency":"numpy==1.19.1; python_version > '3.0' and python_version < '20'","explain":"Missing","sites":null}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c4() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages =
+            vec![
+                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==1.19.1; python_version > '3.0' and python_version < '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: true,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c5() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":"numpy-1.19.3","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+    }
+
+    #[test]
+    fn test_validation_evn_marker_c6() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec![
+                "numpy==1.2; python_version > '20'",
+                "numpy==2.0; python_version < '3.0'",
+                "static_frame==2.13.0",
+            ]
+            .iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_d1() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec!["numpy==1.2", "numpy==2.0", "static_frame==2.13.0"].iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(json, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_evn_marker_d2() {
+        let exe = PathBuf::from("python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.2", None).unwrap(),
+        ];
+
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        let dm = DepManifest::from_iter(
+            vec!["numpy==1.2", "numpy==2.0", "static_frame==2.13.0"].iter(),
+        )
+        .unwrap();
+
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: true,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        assert_eq!(
+            json,
+            r#"[{"package":null,"dependency":"numpy==1.2","explain":"Missing","sites":null},{"package":null,"dependency":"numpy==2.0","explain":"Missing","sites":null}]"#
+        );
     }
 
     //--------------------------------------------------------------------------
