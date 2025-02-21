@@ -417,6 +417,7 @@ impl ScanFS {
         log: bool,
     ) -> ValidationReport {
         let mut records: Vec<ValidationRecord> = Vec::new();
+        // We collect all DS keys matched to package, regardless of if the version matches; we can then (if we do not permit_subset) find all the DS definitions that were not satisfied
         let mut ds_keys_matched: HashSet<&String> = HashSet::new();
 
         if dm.env_marker_active {
@@ -425,11 +426,19 @@ impl ScanFS {
 
         // iterate over found packages in order for better reporting
         for package in self.get_packages() {
-            // For each package, if the DepManifest has env_marker_active, we have to get the EnvMarkerState for the python exe from which this Package came. That means that we get each site package associated with this Package, get the exe for each site package, and then determine if the dependency remains after filtering EnvMarkerState
-            if let Some(exe_to_ems) = &self.exe_to_ems {
+            if !dm.has_package(&package) && !vf.permit_superset {
+                let sites = self.package_to_sites.get(&package).cloned();
+                // Add records if package is not in the DM and do not permit superset
+                records.push(ValidationRecord::new(
+                    Some(package), // can take ownership of Package
+                    None,
+                    sites,
+                ));
+            } else if let Some(exe_to_ems) = &self.exe_to_ems {
+                // For each package, if the DepManifest has env_marker_active, we have already loaded EnvMarkerState
                 for site in self.package_to_sites.get(&package).unwrap() {
                     let exe = self.site_to_exe.get(site).unwrap();
-                    let ems = exe_to_ems.get(exe); // do not unwrap as validate() expects Option
+                    let ems = exe_to_ems.get(exe); // validate() expects Option
                     let (valid, ds) = dm.validate(&package, vf.permit_superset, ems);
                     if let Some(ds) = ds {
                         ds_keys_matched.insert(&ds.key);
@@ -449,7 +458,6 @@ impl ScanFS {
                     ds_keys_matched.insert(&ds.key);
                 }
                 if !valid {
-                    // package should always have defined sites
                     let sites = self.package_to_sites.get(&package).cloned();
                     // ds is an Option type, might be None
                     records.push(ValidationRecord::new(
@@ -461,12 +469,33 @@ impl ScanFS {
             }
         }
         if !vf.permit_subset {
-            // if we do not permit_subset, all packages defined in DepSpec but not found are an error
+            // find DS in DM that are not in packages; if any DS has env_marker relevant to the known environmets, report it.
             // NOTE: this is sorted, but not sorted with the other records
             for key in dm.get_dep_spec_difference(&ds_keys_matched) {
                 if let Some(iter) = dm.get_dep_specs(key) {
                     for ds in iter {
-                        records.push(ValidationRecord::new(None, Some(ds.clone()), None));
+                        // if a DS has an env_marker, that env_marker must be valid for at least one of our exe environents
+                        if !ds.env_marker.is_empty() {
+                            if let Some(exe_to_ems) = &self.exe_to_ems {
+                                if exe_to_ems
+                                    .values()
+                                    .map(|ems| ds.validate_env_marker(ems))
+                                    .any(|b| b)
+                                {
+                                    records.push(ValidationRecord::new(
+                                        None,
+                                        Some(ds.clone()),
+                                        None,
+                                    ));
+                                }
+                            }
+                        } else {
+                            records.push(ValidationRecord::new(
+                                None,
+                                Some(ds.clone()),
+                                None,
+                            ));
+                        }
                     }
                 }
             }
@@ -1023,39 +1052,37 @@ mod tests {
     }
 
     #[test]
-    fn test_validation_evn_marker_b() {
+    fn test_validation_evn_marker_b1() {
         let exe = PathBuf::from("python3");
         let site = PathBuf::from("/usr/lib/python3/site-packages");
-        let mut packages =
-            vec![
-                Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
-            ];
-        packages.push(Package::from_name_version_durl("numpy", "1.19.3", None).unwrap());
+        let packages = vec![
+            Package::from_name_version_durl("static-frame", "2.13.0", None).unwrap(),
+            Package::from_name_version_durl("numpy", "2.0", None).unwrap(),
+        ];
 
         let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
 
+        // this DM means that we only need NumPy if Python < 3,
         let dm = DepManifest::from_iter(
             vec![
-                "numpy==1.19.3; platform_system == 'Windows'",
+                "numpy==1.19.3; python_version < '3.0'",
                 "static_frame==2.13.0",
             ]
             .iter(),
         )
         .unwrap();
 
-        if env::consts::OS != "windows" {
-            let vr = sfs.to_validation_report(
-                dm,
-                ValidationFlags {
-                    permit_superset: false,
-                    permit_subset: false,
-                },
-                false,
-            );
-            let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
-            println!("{:?}", json);
-            assert_eq!(json, r#"[]"#);
-        }
+        let vr = sfs.to_validation_report(
+            dm,
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            false,
+        );
+        let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
+        println!("{:?}", json);
+        assert_eq!(json, r#"[{"package":"numpy-2.0","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#);
     }
 
     #[test]

@@ -308,6 +308,14 @@ impl DepManifest {
         keys
     }
 
+    // fn has_key(&self, key: &str) -> bool {
+    //     self.dep_specs.get(key).is_some()
+    // }
+
+    pub(crate) fn has_package(&self, package: &Package) -> bool {
+        self.dep_specs.get(&package.key).is_some()
+    }
+
     // Return an optional iterator of DepSpecs for the provided key. It is expected there will only be more than one when env markers are used.
     pub(crate) fn get_dep_specs(
         &self,
@@ -341,27 +349,29 @@ impl DepManifest {
     }
 
     // Given a Package, return true or false if it is valid. This is the main public interface for validation.
+    // If we return a DS, it means that have found a DS for this package (which may or may not be validated.
     pub(crate) fn validate(
         &self,
         package: &Package,
         permit_superset: bool,
         env_marker_state: Option<&EnvMarkerState>,
     ) -> (bool, Option<&DepSpec>) {
+        // if we have DS for this package
         if let Some(dsoom) = self.dep_specs.get(&package.key) {
             match dsoom {
                 DepSpecOOM::One(ds) => {
-                    // Given one dependency, if relevant for this environment, test, otherwise ignore (pass)
-                    let valid = match env_marker_state {
-                        Some(ems) => {
-                            if ds.validate_env_marker(ems) {
-                                ds.validate_package(package)
-                            } else {
-                                true
-                            }
+                    if ds.env_marker.is_empty() {
+                        (ds.validate_package(package), Some(ds))
+                    } else {
+                        // DS has env marker
+                        let ems = env_marker_state.expect("EMS should be loaded");
+                        if ds.validate_env_marker(ems) {
+                            (ds.validate_package(package), Some(ds))
+                        } else {
+                            // if DS not relevant for this environment, do not return it
+                            (permit_superset, None)
                         }
-                        None => ds.validate_package(package),
-                    };
-                    (valid, Some(ds))
+                    }
                 }
                 DepSpecOOM::Many(dsv) => {
                     // Given many dependencies for the same package, if one matches this environmetn, test, otherwise pass.
@@ -380,7 +390,8 @@ impl DepManifest {
             }
             // let valid = ds.validate_package(package);
         } else {
-            (permit_superset, None) // cannot get a dep spec
+            // no DS for this package; if permit_superset, we deem this as valid; we cannot return a DS
+            (permit_superset, None)
         }
     }
 
