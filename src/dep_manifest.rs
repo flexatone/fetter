@@ -313,7 +313,7 @@ impl DepManifest {
     // }
 
     pub(crate) fn has_package(&self, package: &Package) -> bool {
-        self.dep_specs.get(&package.key).is_some()
+        self.dep_specs.contains_key(&package.key)
     }
 
     // Return an optional iterator of DepSpecs for the provided key. It is expected there will only be more than one when env markers are used.

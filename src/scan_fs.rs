@@ -479,8 +479,7 @@ impl ScanFS {
                             if let Some(exe_to_ems) = &self.exe_to_ems {
                                 if exe_to_ems
                                     .values()
-                                    .map(|ems| ds.validate_env_marker(ems))
-                                    .any(|b| b)
+                                    .any(|ems| ds.validate_env_marker(ems))
                                 {
                                     records.push(ValidationRecord::new(
                                         None,
