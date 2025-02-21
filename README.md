@@ -176,13 +176,13 @@ The `site-install` command takes the same arguments as `validate`. Automatic val
 For example, the following command will validate packages installed for the currently available `python3` against a "requirement.txt" lock file and issue warnings:
 
 ```shell
-$ fetter -e python3 site-install --bound requirements.txt --superset
+$ fetter -e python3 site-install --bound requirements.txt
 ```
 
 For stronger control, the `exit` subcommand can be added to force process termination on validation errors.
 
 ```shell
-$ fetter -e python3 site-install --bound requirements.txt --superset exit
+$ fetter -e python3 site-install --bound requirements.txt exit
 ```
 
 To uninstall automatic environment validation, run `site-uninstall` with the same Python executable:
