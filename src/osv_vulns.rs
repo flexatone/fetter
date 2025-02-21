@@ -158,7 +158,6 @@ mod tests {
 
     use crate::ureq_client::UreqClientMock;
 
-
     #[test]
     fn test_vuln_a() {
         let vuln_ids = vec!["GHSA-48cq-79qq-6f7x".to_string()];
