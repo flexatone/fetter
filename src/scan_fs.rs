@@ -426,14 +426,17 @@ impl ScanFS {
 
         // iterate over found packages in order for better reporting
         for package in self.get_packages() {
-            if !dm.has_package(&package) && !vf.permit_superset {
-                let sites = self.package_to_sites.get(&package).cloned();
-                // Add records if package is not in the DM and do not permit superset
-                records.push(ValidationRecord::new(
-                    Some(package), // can take ownership of Package
-                    None,
-                    sites,
-                ));
+            if !dm.has_package(&package) {
+                if !vf.permit_superset {
+                    let sites = self.package_to_sites.get(&package).cloned();
+                    // Add records if package is not in the DM and do not permit superset
+                    records.push(ValidationRecord::new(
+                        Some(package), // can take ownership of Package
+                        None,
+                        sites,
+                    ));
+                }
+                // else do not add record
             } else if let Some(exe_to_ems) = &self.exe_to_ems {
                 // For each package, if the DepManifest has env_marker_active, we have already loaded EnvMarkerState
                 for site in self.package_to_sites.get(&package).unwrap() {
