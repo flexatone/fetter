@@ -43,13 +43,18 @@ $ pip install fetter
 $ fetter --help
 ```
 
-Alternatively, as `fetter` can operate on multiple virtual environments, installation via [`pipx`](https://pipx.pypa.io) might be desirable:
+As `fetter` can operate on multiple virtual environments, installation via [`pipx`](https://pipx.pypa.io) might be desirable:
 
 ```shell
 $ pipx install fetter
 $ fetter --version
 ```
 
+An "ephemeral" `fetter` installation and run is also possible with [`uvx`](https://docs.astral.sh/uv/guides/tools):
+
+```shell
+$ uvx fetter --version
+```
 
 
 ## Using `fetter` from the Command Line
