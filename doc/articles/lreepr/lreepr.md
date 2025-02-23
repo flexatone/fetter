@@ -46,7 +46,7 @@ fetter==1.6.0
 {.env313-test} $ pip install -r requirements.txt
 ```
 
-As will be clear from the output of the previous command, more than three packages are installed: `requests` adds a number of transitive dependencies. This well be made clear if we use `fetter validate`:
+As will be clear from the output of the previous command, more than three packages are installed: `requests` adds a number of transitive dependencies. This well be made clear by using `fetter validate` and supplying the current Python with `-e python3` and the dependencies with `--bound requirements.txt`:
 
 ```shell
 {.env313-test} % fetter -e python3 validate --bound requirements.txt
@@ -58,27 +58,65 @@ pip-24.3.1                            Unrequired  ~/.env313-test/lib/python3.13/
 urllib3-2.3.0                         Unrequired  ~/.env313-test/lib/python3.13/site-packages
 ```
 
-Arbitrary unspecified packages can be accepted with the `--superset` argument, though this is undesirable if a locked environment is our goal. No output here shows the validation passed.
+This command fails validation as five "unreqiured" packages (the transitive dependencies) are identified. Unspecified packages can be accepted with the `--superset` argument, though this is undesirable if a locked environment is our goal. When using `--supereset`, no output shows the validation passed.
 
 ```shell
 {.env313-test} % fetter -e python3 validate --bound requirements.txt --superset
 ```
 
+To make the environment truly reproducible, a lock file is required. The `--bound` argument will accept lock files from `pip-tools`, `pipenv`, `poetry`, or `uv`. Another option is to simply use `pip freeze`:
 
+```shell
+{.env313-test} % pip freeze > requirements.lock
+```
+Now, the `--superset` argument can be removed and we can unambiguously determine if all dependencies (both direct and transitive) are bound within expectations.
 
-
+```shell
+{.env313-test} % fetter -e python3 validate --bound requirements.txt
+```
 
 ## Automating Validation with `fetter site-install`
 
-To automate validating your environment a
+While environment validation can be done as needed, or with every commit via `pre-commit`, a truely deterministics, reprorducable environment is only possible if validation is done before every Python execution. The `fetter site-install` command installs special ".pth" file in the target environment's "site-packages" that, at the start of Python initializaiton, runs `fetter validate`. By default, if validation fails, a warning is printed`. To lock our current environment, run the following command:
+
+```shell
+{.env313-test} $ fetter -e python3 site-install --bound requirements.lock
+```
+
+Now, on every evocation of this environments Python, the environment will be validated. To see this in action, we can install a package and run `python3`.
+
+```shell
+{.env313-test} $ pip3 install typing-extensions
+{.env313-test} $ python3
+Failed: fetter 1.6.0: validate --bound requirements.lock
+Package                   Dependency  Explain     Sites
+typing_extensions-4.12.2              Unrequired  ~/.env313-test/lib/python3.13/site-packages
+Python 3.13.1 (main, Dec  3 2024, 17:59:52) [Clang 16.0.0 (clang-1600.0.26.4)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+>>>
+```
+
+For even stronger control, if environment validation fails, `fetter` can exit the process with supplied exit code.
+
+```shell
+{.env313-test} $ fetter -e python3 site-install --bound requirements.lock exit --code 3
+{.env313-test} $ python3
+Failed: fetter 1.6.0: validate --bound requirements.lock
+Package                   Dependency  Explain     Sites
+typing_extensions-4.12.2              Unrequired  ~/.env313-test/lib/python3.13/site-packages
+{.env313-test} $
+```
+
+## Active Environment Locking
+
+Once compiled, the dependencies of binary executable cannot change; a verified, reproducible binary can thus always gauarentee repeatability. Many Python users, on the other hand, run code in a "live" environment, where dependencies can (intentionally or not) be removed, added, or changed at any time. This can lead to a missaligned environment, opening the door to divergent behavior or missing out on upgrades that mitigate vulnerabilities.
+
+With `fetter site-install`, environments can be automatically checked before every Python execution, providing immediate, active awareness of a critical aspect of running Python code: the alignment of dependencies.
 
 
 
 
-----------
-
-Unused:
-
+<!--
 For compiled languages, dependency reproducible builds are required to establish a chain of trust between source code and binaries. Is it possible to have this in Python? While Python runs byte code instead of binaries, is it possible to enforce reproducible behavior by only running Python if the dependencies conform to an explicit definition?
 
 
@@ -87,15 +125,15 @@ For many, daily use of Python involves writing and executing code in a virtual e
 The only way to ensure reproducible behavior in Python (as well as reducing the risk of installing malware) is to validate installed virtual environment dependencies against a lock file. If we can do it fast enough, we should do it every time we run Python. That is what the `fetter site-install` command does.
 
 The only way to avoid this in Python is to validate dependencies against a lock file. If we can do it fast enough, we should do it every time we run Python. That is what the `fetter site-install` command does.
+ -->
 
-
-
-
-===========
-
+<!--
 uv:
 
 Prior to every uv run invocation, uv will verify that the lockfile is up-to-date with the pyproject.toml, and that the environment is up-to-date with the lockfile, keeping your project in-sync without the need for manual intervention. uv run guarantees that your command is run in a consistent, locked environment.
+
+
+ -->
 
 
 
