@@ -29,11 +29,41 @@ Environments are specified with a relative or absolute path to a Python executab
 
 Dependencies are specified with a relative or absolute path given to the `--bound` parameter. Most Python projects define direct (explicitly imported) dependencies in a `requirements.txt` or `pyproject.toml` file. As direct dependencies generally require many of their own "transitive" dependencies, a direct dependency listing is insufficient to fully describe an environment. For this reason tools such as `pip-compile`, `pipenv`, `poetry` and `uv` offer solutions for maintaining "lock" files, complete definitions of both direct and transitive dependencies.
 
-Given values for `-e` and `--bound`, `fetter validate` can be used for ad-hoc environment checks.
+Given values for `-e` and `--bound`, `fetter validate` can be used for ad-hoc environment checks. Lets start by creating and activating a fresh virtual environment:
 
+```shell
+$ python3 -m venv ~/.env313-test
+$ source ~/.env313-test/bin/activate
+```
 
+Given a "requirements.txt" file with three entries, we can install them with `pip`:
 
-In performing environment validation, a direct-dependency specification alone can be used, though the `--superset` option is generally necessary to permit untracked, transitive dependencies.
+```
+{.env313-test} $ cat requirements.txt
+numpy==2.2.3
+requests==2.32.2
+fetter==1.6.0
+{.env313-test} $ pip install -r requirements.txt
+```
+
+As will be clear from the output of the previous command, more than three packages are installed: `requests` adds a number of transitive dependencies. This well be made clear if we use `fetter validate`:
+
+```shell
+{.env313-test} % fetter -e python3 validate --bound requirements.txt
+Package                   Dependency  Explain     Sites
+certifi-2025.1.31                     Unrequired  ~/.env313-test/lib/python3.13/site-packages
+charset_normalizer-3.4.1              Unrequired  ~/.env313-test/lib/python3.13/site-packages
+idna-3.10                             Unrequired  ~/.env313-test/lib/python3.13/site-packages
+pip-24.3.1                            Unrequired  ~/.env313-test/lib/python3.13/site-packages
+urllib3-2.3.0                         Unrequired  ~/.env313-test/lib/python3.13/site-packages
+```
+
+Arbitrary unspecified packages can be accepted with the `--superset` argument, though this is undesirable if a locked environment is our goal. No output here shows the validation passed.
+
+```shell
+{.env313-test} % fetter -e python3 validate --bound requirements.txt --superset
+```
+
 
 
 
