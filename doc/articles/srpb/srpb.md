@@ -9,11 +9,11 @@
 # Ensure a Reproducible Environment for Every Python Run
 # Make Every Python Execution Predictable and Reproducible -->
 
-For many, daily use of Python involves writing and executing code in an environment of well-defined dependencies. If collaborating with others, dependencies can change without notice; even if dependencies did not change, it is easy to mistakenly install a package in the wrong environment. When local dependencies are misaligned, bad things can happen: behaviors may change, outputs might differ, or known malware might be linger.
+For many, daily use of Python involves executing code in an environment of well-defined dependencies. If collaborating with others, dependencies can change without notice; even if dependencies did not change, it is easy to mistakenly install a package in the wrong environment. When local dependencies are misaligned, bad things can happen: behaviors may change, outputs might differ, or known malware might be linger.
 
 For compiled languages, alignment of dependencies to distributed binaries is required for creating "reproducible builds". For Python, is it possible to enforce reproducible behavior?
 
-Python supports such intervention in initialization, and the `fetter` command-line tool can configure an environment's `python` to either warn or exit before running with misaligned dependencies.
+Python supports such intervention in initialization: the `fetter` command-line tool can configure an environment's `python` to either warn or exit before running with misaligned dependencies. For example, to always validate the environment of the locally active `python3` with `requirements.lock`, install `fetter` and run the following:
 
 ```shell
 $ fetter -e python3 site-install --bound requirements.lock
@@ -23,9 +23,20 @@ Implemented in efficient multi-threaded Rust, performance overhead is insignific
 
 ## Validating Environments
 
-To validate an environment, you must specify an environment (via a Python executable) and a manifest dependencies.
+To validate an environment, you must specify an environment (via a Python executable) and a manifest of dependencies.
 
-Most Python projects define direct (explicitly imported) dependencies in a `requirements.txt` or `pyproject.toml` file. As direct dependencies generally require many "transitive" dependencies, a direct dependency listing is insufficient to fully describe an environment. For this reason tools such as `pip-compile`, `pipenv`, `poetry` and `uv` have offered solutions for creating and maintaing lock files, complete definitions of both direct and transitive dependencies.
+Environments are specified with a relative or absolute path to a Python executable, given with the `--exe` or `-e` parameter. If a virtual environment is active, specifying `python3` is sufficient.
+
+Dependencies are specified with a relative or absolute path given to the `--bound` parameter. Most Python projects define direct (explicitly imported) dependencies in a `requirements.txt` or `pyproject.toml` file. As direct dependencies generally require many of their own "transitive" dependencies, a direct dependency listing is insufficient to fully describe an environment. For this reason tools such as `pip-compile`, `pipenv`, `poetry` and `uv` offer solutions for maintaining "lock" files, complete definitions of both direct and transitive dependencies.
+
+Given values for `-e` and `--bound`, `fetter validate` can be used for ad-hoc environment checks.
+
+
+
+In performing environment validation, a direct-dependency specification alone can be used, though the `--superset` option is generally necessary to permit untracked, transitive dependencies.
+
+
+
 
 ## Automating Validation with `fetter site-install`
 
