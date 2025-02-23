@@ -13,15 +13,23 @@ For many, daily use of Python involves writing and executing code in an environm
 
 For compiled languages, alignment of dependencies to distributed binaries is required for creating "reproducible builds". For Python, is it possible to enforce reproducible behavior?
 
-Python supports such intervention in initialization, and the `fetter` command-line tool can configure an environment's `python` to either warn or exit before running with misaligned dependencies. Implemented in efficient multi-threaded Rust, performance overhead is insignificant. While project-specific Python "front-end" commands like `uv run` or `poetry run` offer similar functionality, `fetter` is run on every evocation of `python` itself, and can be used with any type of project.
+Python supports such intervention in initialization, and the `fetter` command-line tool can configure an environment's `python` to either warn or exit before running with misaligned dependencies.
+
+```shell
+$ fetter -e python3 site-install --bound requirements.lock
+```
+
+Implemented in efficient multi-threaded Rust, performance overhead is insignificant. While project-specific Python "front-end" commands like `uv run` or `poetry run` offer similar functionality, `fetter` is run on every evocation of `python` itself, and can be used with any type of project.
 
 ## Validating Environments
 
-Most Python projects define direct (explicitly imported) dependencies in a `requirements.txt` or `pyproject.toml` file. As direct dependencies generally require many "transitive" dependencies, a direct dependency listing is insufficient to fully desribe an environemnt. For this reason tools such as `pip-compile`, `pipenv`, `poetry` and `uv` have offered solutions for creating and maintaing lock files, complete definitions of both direct and transitive dependencies.
+To validate an environment, you must specify an environment (via a Python executable) and a manifest dependencies.
+
+Most Python projects define direct (explicitly imported) dependencies in a `requirements.txt` or `pyproject.toml` file. As direct dependencies generally require many "transitive" dependencies, a direct dependency listing is insufficient to fully describe an environment. For this reason tools such as `pip-compile`, `pipenv`, `poetry` and `uv` have offered solutions for creating and maintaing lock files, complete definitions of both direct and transitive dependencies.
 
 ## Automating Validation with `fetter site-install`
 
-
+To automate validating your environment a
 
 
 
