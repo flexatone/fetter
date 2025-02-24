@@ -520,7 +520,6 @@ where
             let permit_subset = *subset;
 
             let u_ignore: HashSet<String> = HashSet::from_iter(ignore.iter().cloned());
-            println!("u_ignore: {:?}", u_ignore);
 
             let vr = sfs.to_validation_report(
                 dm,
