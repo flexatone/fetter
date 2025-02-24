@@ -481,6 +481,9 @@ impl ScanFS {
             for key in dm.get_dep_spec_difference(&ds_keys_matched) {
                 if let Some(iter) = dm.get_dep_specs(key) {
                     for ds in iter {
+                        if ignore.is_some_and(|i| i.contains(&ds.name)) {
+                            continue;
+                        }
                         // if a DS has an env_marker, that env_marker must be valid for at least one of our exe environents
                         if !ds.env_marker.is_empty() {
                             if let Some(exe_to_ems) = &self.exe_to_ems {
