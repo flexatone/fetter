@@ -1,5 +1,5 @@
 
-# A Locked & Reproducible Environment on Every Python Run
+# A Locked & Reproducible Environment on Every Python Run with `fetter`
 
 <!--
 # Make Every Python Run Locked & Reproducible
@@ -13,6 +13,7 @@
 # Ensure a Reproducible Environment for Every Python Run
 # Make Every Python Execution Predictable and Reproducible -->
 
+
 For many, daily use of Python involves executing code in an environment of well-defined dependencies. If collaborating with others, dependencies can change without notice; even if dependencies do not change, it is easy to mistakenly install a package in the wrong environment. When local dependencies are misaligned, bad things can happen: behaviors may change, outputs might differ, or known malware might linger.
 
 For compiled languages, alignment of dependencies in distributed binaries is required for creating reproducible builds. For Python, is it possible to enforce reproducible behavior?
@@ -23,13 +24,13 @@ Leveraging Python's support for such initialization intervention, the `fetter` c
 $ fetter -e python3 site-install --bound requirements.lock
 ```
 
-Implemented in efficient multi-threaded Rust, performance overhead is insignificant. While project-specific Python "front-end" commands like `uv run` or `poetry run` offer related functionality, `fetter` is run on every evocation of `python` itself, and can be used with any type of project.
+Implemented in efficient multi-threaded Rust, performance overhead is insignificant. While project-specific Python "front-end" commands like `uv run` or `poetry run` offer related functionality, `fetter` is run on every execution of `python` itself, and can be used with any type of project.
 
 ## Validating Environments
 
-To validate an environment, you must specify the environment with a Python executable and a manifest of dependencies.
+To validate an environment, two things are required: (1) the Python executable for that environment and (2) a manifest of dependencies.
 
-Environments are specified with a relative or absolute path to a Python executable, given with the `--exe` or `-e` parameter. If a virtual environment is active, specifying `-e python3` is sufficient.
+Environments are specified with a path to a Python executable, given with the `--exe` or `-e` parameter. If a virtual environment is active, specifying `-e python3` is sufficient.
 
 Dependencies are specified with a path given to the `--bound` parameter. Most Python projects define direct (explicitly imported) dependencies in a `requirements.txt` or `pyproject.toml` file. As direct dependencies generally require many of their own "transitive" dependencies, a direct dependency listing is insufficient to fully define an environment. For this reason, tools such as `pip-compile`, `pipenv`, `poetry` and `uv` offer solutions for maintaining "lock" files: complete definitions of both direct and transitive dependencies.
 
@@ -50,7 +51,7 @@ fetter==1.7.0
 {.env-test} $ pip install -r requirements.txt
 ```
 
-Note that more than three packages are installed: `requests` adds a number of transitive dependencies. Providing the virtual environment's Python with `-e python3` and the dependencies with `--bound requirements.txt`, `fetter validate` reports the "Unrequired" dependencies:
+While only three direct dependencies are defined, seven packages are installed: `requests` adds four transitive dependencies. Providing the virtual environment's Python with `-e python3` and the dependencies with `--bound requirements.txt`, `fetter validate` reports these installed but not defined dependencies as "Unrequired":
 
 ```shell
 {.env-test} % fetter -e python3 validate --bound requirements.txt
@@ -61,7 +62,7 @@ idna-3.10                             Unrequired  ~/.env-test/lib/python3.13/sit
 urllib3-2.3.0                         Unrequired  ~/.env-test/lib/python3.13/site-packages
 ```
 
-While not enforcing a truly locked environment, unrequired packages can be accepted with the `--superset` flag. For example, using `--superset`, validation passes with no output.
+While unrequired packages can be accepted with the `--superset` flag, this disables enforcement of a truly locked environment. For example, using `--superset`, validation passes with no failure.
 
 ```shell
 {.env-test} % fetter -e python3 validate --bound requirements.txt --superset
@@ -87,7 +88,7 @@ While environment validation with `fetter` can be done as needed or with every c
 {.env-test} $ fetter -e python3 site-install --bound requirements.lock
 ```
 
-Now, on every evocation of Python, the environment is validated. For example, after installing an unrequired package, running `python3` displays a validation failure:
+Now, on every execution of Python, the environment is validated. For example, after installing an unrequired package, running `python3` displays a validation failure:
 
 ```shell
 {.env-test} $ pip3 install typing-extensions
@@ -119,9 +120,11 @@ To uninstall automatic environment validation, use `fetter site-uninstall`:
 
 ## Active Environment Locking
 
-Once compiled, a binary from a reproducible build process can guarantee repeatability. Many Python users, on the other hand, run code in a "live" environment, where dependencies can (intentionally or not) be removed, added, or changed. This can lead to a misaligned environment, potentially causing divergent behavior or missed mitigation of vulnerabilities. With `fetter site-install`, environments can be automatically checked before every Python execution, providing active awareness of any dependency misalignment.
+Unlike compiled languages, where dependencies are locked at build time, Python environments are "live": Python will attempt to run regardless of if dependencies are correct. With `fetter site-install`, dependency alignment is ensured before every execution, potentially preventing surprises and mitigating vulnerabilities.
 
 
 
+<!-- Once compiled, a binary from a reproducible build process can guarantee repeatability. In contrast, many Python users run code in a "live" environment, where dependencies can (intentionally or not) be removed, added, or changed. This can lead to a misaligned environment, potentially causing divergent behavior or missed mitigation of vulnerabilities. With `fetter site-install`, environments can be automatically checked before every Python execution, providing active awareness of any dependency misalignment.
+ -->
 
 
