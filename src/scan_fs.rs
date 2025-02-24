@@ -1565,6 +1565,101 @@ mod tests {
 
     //--------------------------------------------------------------------------
     #[test]
+    fn test_validation_ignore_a() {
+        let exe = PathBuf::from("/usr/bin/python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+            Package::from_name_version_durl("static-frame", "2.13.2", None).unwrap(),
+            Package::from_name_version_durl("pip", "23.1.2", None).unwrap(),
+        ];
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // hyphen / underscore are normalized
+        let dm =
+            DepManifest::from_iter(vec!["numpy==1.19.3", "static_frame>=2.13.0"].iter())
+                .unwrap();
+
+        let vr1 = sfs.to_validation_report(
+            dm.clone(),
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            None,
+            false,
+        );
+        let json1 = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
+        assert_eq!(
+            json1,
+            r#"[{"package":"pip-23.1.2","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+
+        let mut ignore: HashSet<String> = HashSet::new();
+        ignore.insert("pip".to_string());
+
+        let vr2 = sfs.to_validation_report(
+            dm.clone(),
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            Some(&ignore),
+            false,
+        );
+        let json2 = serde_json::to_string(&vr2.to_validation_digest()).unwrap();
+        assert_eq!(json2, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_ignore_b() {
+        let exe = PathBuf::from("/usr/bin/python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+            Package::from_name_version_durl("static-frame", "2.13.2", None).unwrap(),
+        ];
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // hyphen / underscore are normalized
+        let dm = DepManifest::from_iter(
+            vec!["numpy==1.19.3", "static_frame>=2.13.0", "pip==23.1.2"].iter(),
+        )
+        .unwrap();
+
+        let vr1 = sfs.to_validation_report(
+            dm.clone(),
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            None,
+            false,
+        );
+        let json1 = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
+        assert_eq!(
+            json1,
+            r#"[{"package":null,"dependency":"pip==23.1.2","explain":"Missing","sites":null}]"#
+        );
+
+        let mut ignore: HashSet<String> = HashSet::new();
+        ignore.insert("pip".to_string());
+
+        let vr2 = sfs.to_validation_report(
+            dm.clone(),
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            Some(&ignore),
+            false,
+        );
+        let json2 = serde_json::to_string(&vr2.to_validation_digest()).unwrap();
+        assert_eq!(json2, r#"[]"#);
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
     fn test_search_a() {
         let exe = PathBuf::from("/usr/bin/python3");
         let site = PathBuf::from("/usr/lib/python3/site-packages");
