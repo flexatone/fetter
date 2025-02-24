@@ -143,7 +143,7 @@ enum Commands {
         bound_options: Option<Vec<String>>,
 
         /// Names of packages to be excluded from all evaluation.
-        #[arg(long, value_name = "OPTIONS",  default_value = "pip")]
+        #[arg(long, value_name = "OPTIONS", default_value = "pip")]
         ignore: Vec<String>, // because we default, no reason to make Option
 
         /// If the subset flag is set, the observed packages can be a subset of the bound requirements.
@@ -528,6 +528,7 @@ where
                     permit_superset,
                     permit_subset,
                 },
+                Some(&u_ignore),
                 log,
             );
             // we only print the banner on failure for now

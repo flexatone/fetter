@@ -414,6 +414,7 @@ impl ScanFS {
         &mut self,
         dm: DepManifest,
         vf: ValidationFlags,
+        ignore: Option<&HashSet<String>>,
         log: bool,
     ) -> ValidationReport {
         let mut records: Vec<ValidationRecord> = Vec::new();
@@ -426,6 +427,9 @@ impl ScanFS {
 
         // iterate over found packages in order for better reporting
         for package in self.get_packages() {
+            if ignore.map_or(false, |i| i.contains(&package.name)) {
+                continue;
+            }
             if !dm.has_package(&package) {
                 if !vf.permit_superset {
                     let sites = self.package_to_sites.get(&package).cloned();
@@ -623,7 +627,7 @@ impl ScanFS {
         vf: ValidationFlags,
         log: bool,
     ) -> io::Result<()> {
-        let vr = self.to_validation_report(dm, vf, false);
+        let vr = self.to_validation_report(dm, vf, None, false);
         let packages: Vec<Package> = vr
             .records
             .iter()
@@ -730,6 +734,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(invalid1.len(), 0);
@@ -741,6 +746,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(invalid2.len(), 1);
@@ -788,6 +794,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr.len(), 0);
@@ -813,6 +820,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
 
@@ -844,6 +852,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(sfs.exe_to_sites.get(&exe).unwrap()[0].strong_count(), 8);
@@ -873,6 +882,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -903,6 +913,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr.len(), 0);
@@ -928,6 +939,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr.len(), 1);
@@ -953,6 +965,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr1.len(), 1);
@@ -968,6 +981,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr2.len(), 0);
@@ -993,6 +1007,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
@@ -1007,6 +1022,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: true,
             },
+            None,
             false,
         );
         assert_eq!(vr2.len(), 0);
@@ -1046,6 +1062,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1079,6 +1096,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1115,6 +1133,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1148,6 +1167,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1181,6 +1201,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1217,6 +1238,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: true,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1253,6 +1275,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: true,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1287,6 +1310,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1321,6 +1345,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1358,6 +1383,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1395,6 +1421,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: true,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1428,6 +1455,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1464,6 +1492,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1492,6 +1521,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1520,6 +1550,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
