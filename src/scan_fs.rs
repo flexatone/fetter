@@ -427,7 +427,7 @@ impl ScanFS {
 
         // iterate over found packages in order for better reporting
         for package in self.get_packages() {
-            if ignore.map_or(false, |i| i.contains(&package.name)) {
+            if ignore.is_some_and(|i| i.contains(&package.name)) {
                 continue;
             }
             if !dm.has_package(&package) {
