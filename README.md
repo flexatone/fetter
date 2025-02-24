@@ -13,7 +13,7 @@
     <img src="https://img.shields.io/crates/d/fetter?label=Downloads&logo=rust"></img>
 </a> -->
 
-## System-wide Python package discovery, validation, and allow-listing.
+## System-wide Python Package Discovery, Validation, and Allow-Listing.
 
 
 The `fetter` command-line tool scans and validates Python packages across virtual environments or entire systems, ensuring packages conform to specified requirements or lock files. It identifies unapproved or vulnerable packages, supports continuous integration with 'pre-commit', and offers excellent performance thanks to a multi-threaded Rust implementation.
@@ -215,7 +215,7 @@ To run `fetter validate` with `pre-commit`, add the following to your `.pre-comm
 ```yaml
 repos:
 - repo: https://github.com/fetter-io/fetter-rs
-  rev: v1.6.0
+  rev: v1.7.0
   hooks:
     - id: fetter-validate
       args: [--bound, {FILE}, --superset, --subset, display, --code, 3]
@@ -231,7 +231,7 @@ To run `fetter audit` with `pre-commit`, add the following to your `.pre-commit-
 ```yaml
 repos:
 - repo: https://github.com/fetter-io/fetter-rs
-  rev: v1.6.0
+  rev: v1.7.0
   hooks:
     - id: fetter-audit
 ```
@@ -294,6 +294,7 @@ repos:
 - Options
   - `--bound, -b <FILE>`: Path or URL to the file containing bound requirements, which can be a requirements.txt, pyproject.toml or a lock file created by `uv`, `poetry`, `pipenv`, or `pip-tools`.
   - `--bound-options <OPTIONS>`: Names of additional optional dependency groups.
+  - `--ignore <OPTIONS>`: Names of packages to be excluded from all evaluation.
   - `--subset`: Allow the observed packages to be a subset of the bound requirements.
   - `--superset`: Allow the observed packages to be a superset of the bound requirements.
 - Subcommands
@@ -381,6 +382,11 @@ repos:
 
 
 ## What is New in Fetter
+
+### 1.7.0
+
+Added the `--ignore` parameter to `validate` to permit bypassing validation of specified packages. Defaults to ignore `pip`.
+
 
 ### 1.6.0
 
