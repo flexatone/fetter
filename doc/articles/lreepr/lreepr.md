@@ -116,7 +116,7 @@ To uninstall automatic environment validation, use `fetter site-uninstall`:
 
 ## Active Environment Locking
 
-Once compiled, the dependencies of a binary executable cannot change; a verified, reproducible binary can thus always gauarentee repeatability. Many Python users, on the other hand, run code in a "live" environment, where dependencies can (intentionally or not) be removed, added, or changed. This can lead to a missaligned environment, potentially leading to divergent behavior or missed upgrades that mitigate vulnerabilities.
+Once compiled, the dependencies of a binary executable cannot change; a verified, reproducible binary can thus guarantee repeatability. Many Python users, on the other hand, run code in a "live" environment, where dependencies can (intentionally or not) be removed, added, or changed. This can lead to a missaligned environment, potentially leading to divergent behavior or missed upgrades that mitigate vulnerabilities.
 
 With `fetter site-install`, environments can be automatically checked before every Python execution, providing immediate, active awareness of a critical aspect of running Python code: the alignment of dependencies.
 
