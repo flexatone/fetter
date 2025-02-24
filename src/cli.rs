@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::process;
 // use std::str::FromStr;
 
@@ -143,7 +144,7 @@ enum Commands {
 
         /// Names of packages to be excluded from all evaluation.
         #[arg(long, value_name = "OPTIONS",  default_value = "pip")]
-        ignore: Vec<String>,
+        ignore: Vec<String>, // because we default, no reason to make Option
 
         /// If the subset flag is set, the observed packages can be a subset of the bound requirements.
         #[arg(long)]
@@ -517,7 +518,10 @@ where
             let dm = DepManifest::from_path_or_url(bound, bound_options.as_ref())?;
             let permit_superset = *superset;
             let permit_subset = *subset;
-            println!("ignore: {:?}", ignore);
+
+            let u_ignore: HashSet<String> = HashSet::from_iter(ignore.iter().cloned());
+            println!("u_ignore: {:?}", u_ignore);
+
             let vr = sfs.to_validation_report(
                 dm,
                 ValidationFlags {
