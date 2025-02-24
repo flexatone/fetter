@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::process;
 // use std::str::FromStr;
 
@@ -140,6 +141,10 @@ enum Commands {
         /// Names of additional optional (extra) dependency groups.
         #[arg(long, value_name = "OPTIONS")]
         bound_options: Option<Vec<String>>,
+
+        /// Names of packages to be excluded from all evaluation.
+        #[arg(long, value_name = "OPTIONS", default_value = "pip")]
+        ignore: Vec<String>, // because we default, no reason to make Option
 
         /// If the subset flag is set, the observed packages can be a subset of the bound requirements.
         #[arg(long)]
@@ -504,6 +509,7 @@ where
         Some(Commands::Validate {
             bound,
             bound_options,
+            ignore,
             subset,
             superset,
             subcommands,
@@ -512,12 +518,17 @@ where
             let dm = DepManifest::from_path_or_url(bound, bound_options.as_ref())?;
             let permit_superset = *superset;
             let permit_subset = *subset;
+
+            let u_ignore: HashSet<String> = HashSet::from_iter(ignore.iter().cloned());
+            println!("u_ignore: {:?}", u_ignore);
+
             let vr = sfs.to_validation_report(
                 dm,
                 ValidationFlags {
                     permit_superset,
                     permit_subset,
                 },
+                Some(&u_ignore),
                 log,
             );
             // we only print the banner on failure for now

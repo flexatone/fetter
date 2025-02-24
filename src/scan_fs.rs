@@ -414,6 +414,7 @@ impl ScanFS {
         &mut self,
         dm: DepManifest,
         vf: ValidationFlags,
+        ignore: Option<&HashSet<String>>,
         log: bool,
     ) -> ValidationReport {
         let mut records: Vec<ValidationRecord> = Vec::new();
@@ -426,6 +427,9 @@ impl ScanFS {
 
         // iterate over found packages in order for better reporting
         for package in self.get_packages() {
+            if ignore.is_some_and(|i| i.contains(&package.name)) {
+                continue;
+            }
             if !dm.has_package(&package) {
                 if !vf.permit_superset {
                     let sites = self.package_to_sites.get(&package).cloned();
@@ -477,6 +481,9 @@ impl ScanFS {
             for key in dm.get_dep_spec_difference(&ds_keys_matched) {
                 if let Some(iter) = dm.get_dep_specs(key) {
                     for ds in iter {
+                        if ignore.is_some_and(|i| i.contains(&ds.name)) {
+                            continue;
+                        }
                         // if a DS has an env_marker, that env_marker must be valid for at least one of our exe environents
                         if !ds.env_marker.is_empty() {
                             if let Some(exe_to_ems) = &self.exe_to_ems {
@@ -623,7 +630,7 @@ impl ScanFS {
         vf: ValidationFlags,
         log: bool,
     ) -> io::Result<()> {
-        let vr = self.to_validation_report(dm, vf, false);
+        let vr = self.to_validation_report(dm, vf, None, false);
         let packages: Vec<Package> = vr
             .records
             .iter()
@@ -730,6 +737,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(invalid1.len(), 0);
@@ -741,6 +749,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(invalid2.len(), 1);
@@ -788,6 +797,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr.len(), 0);
@@ -813,6 +823,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
 
@@ -844,6 +855,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(sfs.exe_to_sites.get(&exe).unwrap()[0].strong_count(), 8);
@@ -873,6 +885,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -903,6 +916,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr.len(), 0);
@@ -928,6 +942,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr.len(), 1);
@@ -953,6 +968,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr1.len(), 1);
@@ -968,6 +984,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         assert_eq!(vr2.len(), 0);
@@ -993,6 +1010,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
@@ -1007,6 +1025,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: true,
             },
+            None,
             false,
         );
         assert_eq!(vr2.len(), 0);
@@ -1046,6 +1065,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1079,6 +1099,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1115,6 +1136,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1148,6 +1170,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1181,6 +1204,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1217,6 +1241,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: true,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1253,6 +1278,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: true,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1287,6 +1313,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1321,6 +1348,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1358,6 +1386,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1395,6 +1424,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: true,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1428,6 +1458,7 @@ mod tests {
                 permit_superset: false,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1464,6 +1495,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1492,6 +1524,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1520,6 +1553,7 @@ mod tests {
                 permit_superset: true,
                 permit_subset: false,
             },
+            None,
             false,
         );
         let json = serde_json::to_string(&vr.to_validation_digest()).unwrap();
@@ -1527,6 +1561,101 @@ mod tests {
             json,
             r#"[{"package":null,"dependency":"numpy==1.2","explain":"Missing","sites":null},{"package":null,"dependency":"numpy==2.0","explain":"Missing","sites":null}]"#
         );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_validation_ignore_a() {
+        let exe = PathBuf::from("/usr/bin/python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+            Package::from_name_version_durl("static-frame", "2.13.2", None).unwrap(),
+            Package::from_name_version_durl("pip", "23.1.2", None).unwrap(),
+        ];
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // hyphen / underscore are normalized
+        let dm =
+            DepManifest::from_iter(vec!["numpy==1.19.3", "static_frame>=2.13.0"].iter())
+                .unwrap();
+
+        let vr1 = sfs.to_validation_report(
+            dm.clone(),
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            None,
+            false,
+        );
+        let json1 = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
+        assert_eq!(
+            json1,
+            r#"[{"package":"pip-23.1.2","dependency":null,"explain":"Unrequired","sites":["/usr/lib/python3/site-packages"]}]"#
+        );
+
+        let mut ignore: HashSet<String> = HashSet::new();
+        ignore.insert("pip".to_string());
+
+        let vr2 = sfs.to_validation_report(
+            dm.clone(),
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            Some(&ignore),
+            false,
+        );
+        let json2 = serde_json::to_string(&vr2.to_validation_digest()).unwrap();
+        assert_eq!(json2, r#"[]"#);
+    }
+
+    #[test]
+    fn test_validation_ignore_b() {
+        let exe = PathBuf::from("/usr/bin/python3");
+        let site = PathBuf::from("/usr/lib/python3/site-packages");
+        let packages = vec![
+            Package::from_name_version_durl("numpy", "1.19.3", None).unwrap(),
+            Package::from_name_version_durl("static-frame", "2.13.2", None).unwrap(),
+        ];
+        let mut sfs = ScanFS::from_exe_site_packages(exe, site, packages).unwrap();
+
+        // hyphen / underscore are normalized
+        let dm = DepManifest::from_iter(
+            vec!["numpy==1.19.3", "static_frame>=2.13.0", "pip==23.1.2"].iter(),
+        )
+        .unwrap();
+
+        let vr1 = sfs.to_validation_report(
+            dm.clone(),
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            None,
+            false,
+        );
+        let json1 = serde_json::to_string(&vr1.to_validation_digest()).unwrap();
+        assert_eq!(
+            json1,
+            r#"[{"package":null,"dependency":"pip==23.1.2","explain":"Missing","sites":null}]"#
+        );
+
+        let mut ignore: HashSet<String> = HashSet::new();
+        ignore.insert("pip".to_string());
+
+        let vr2 = sfs.to_validation_report(
+            dm.clone(),
+            ValidationFlags {
+                permit_superset: false,
+                permit_subset: false,
+            },
+            Some(&ignore),
+            false,
+        );
+        let json2 = serde_json::to_string(&vr2.to_validation_digest()).unwrap();
+        assert_eq!(json2, r#"[]"#);
     }
 
     //--------------------------------------------------------------------------
