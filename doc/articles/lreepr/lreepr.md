@@ -1,17 +1,18 @@
 
-# A Locked & Reproducible Environment on Every Python Run with `fetter`
+
+# Guarantee a Locked & Reproducible Environment with Every Python Run
 
 <!--
-# Make Every Python Run Locked & Reproducible
-# Enforce a Locked & Reproducible Environment on Every Python Run
-
- -->
-
-<!--
+Guarantee a Locked & Reproducible Environment with Every Python Run
+Make Every Python Run Locked & Reproducible
+A Locked & Reproducible Environment on Every Python Run
+Enforce a Locked & Reproducible Environment on Every Python Run
+Enforcing Reproducible Python Environments with fetter
 # Stop Running Python Blind: Ensure Package Alignment with Every Python Execution
 # Stop Running Python Blind: Ensure a Reproducible Environment with Every Python Execution
 # Ensure a Reproducible Environment for Every Python Run
-# Make Every Python Execution Predictable and Reproducible -->
+# Make Every Python Execution Predictable and Reproducible
+-->
 
 
 For many, daily use of Python involves executing code in an environment of well-defined dependencies. If collaborating with others, dependencies can change without notice; even if dependencies do not change, it is easy to mistakenly install a package in the wrong environment. When local dependencies are misaligned, bad things can happen: behaviors may change, outputs might differ, or known malware might linger.
@@ -43,7 +44,7 @@ $ source ~/.env-test/bin/activate
 
 Given a "requirements.txt" file with the entries shown below, `pip install -r` can be used to install all packages:
 
-```
+```shell
 {.env-test} $ cat requirements.txt
 numpy==2.2.3
 requests==2.32.2
@@ -120,11 +121,6 @@ To uninstall automatic environment validation, use `fetter site-uninstall`:
 
 ## Active Environment Locking
 
-Unlike compiled languages, where dependencies are locked at build time, Python environments are "live": Python will attempt to run regardless of if dependencies are correct. With `fetter site-install`, dependency alignment is ensured before every execution, potentially preventing surprises and mitigating vulnerabilities.
-
-
-
-<!-- Once compiled, a binary from a reproducible build process can guarantee repeatability. In contrast, many Python users run code in a "live" environment, where dependencies can (intentionally or not) be removed, added, or changed. This can lead to a misaligned environment, potentially causing divergent behavior or missed mitigation of vulnerabilities. With `fetter site-install`, environments can be automatically checked before every Python execution, providing active awareness of any dependency misalignment.
- -->
+Unlike compiled languages, where dependencies are locked at build time and unchangeable at run time, local Python environments are "live": Python will attempt to run regardless of if dependencies have drifted from defined expectations. With `fetter`, dependency alignment can be ensured before every execution.
 
 
