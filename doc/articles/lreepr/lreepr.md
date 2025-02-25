@@ -69,7 +69,7 @@ While unrequired packages can be accepted with the `--superset` flag, this disab
 {.env-test} % fetter -e python3 validate --bound requirements.txt --superset
 ```
 
-To make the comprehensively validate an environment, a lock file is required. The `--bound` argument will accept managed lock files from `pip-tools`, `pipenv`, `poetry`, `uv`, and even the proposed [`PEP 751`](https://peps.python.org/pep-0751) format. A simple option is to use `pip freeze`:
+To comprehensively validate an environment, a lock file is required. The `--bound` argument will accept managed lock files from `pip-tools`, `pipenv`, `poetry`, `uv`, and even the proposed [`PEP 751`](https://peps.python.org/pep-0751) format. A simple option is to use `pip freeze`:
 
 ```shell
 {.env-test} % pip freeze > requirements.lock
