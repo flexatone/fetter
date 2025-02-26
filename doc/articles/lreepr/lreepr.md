@@ -3,7 +3,7 @@
 # Guarantee a Locked & Reproducible Environment with Every Python Run
 
 <!--
-Use Fetter to continuously validate dependencies
+Continuous dependency validation with Fetter
 -->
 
 
