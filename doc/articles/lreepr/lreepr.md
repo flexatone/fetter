@@ -3,43 +3,36 @@
 # Guarantee a Locked & Reproducible Environment with Every Python Run
 
 <!--
-Guarantee a Locked & Reproducible Environment with Every Python Run
-Make Every Python Run Locked & Reproducible
-A Locked & Reproducible Environment on Every Python Run
-Enforce a Locked & Reproducible Environment on Every Python Run
-Enforcing Reproducible Python Environments with fetter
-# Stop Running Python Blind: Ensure Package Alignment with Every Python Execution
-# Stop Running Python Blind: Ensure a Reproducible Environment with Every Python Execution
-# Ensure a Reproducible Environment for Every Python Run
-# Make Every Python Execution Predictable and Reproducible
+Use Fetter to continuously validate dependencies
 -->
 
 
 For many, daily use of Python involves executing code in an environment of well-defined dependencies. If collaborating with others, dependencies can change without notice; even if dependencies do not change, it is easy to mistakenly install a package in the wrong environment. When local dependencies are misaligned, bad things can happen: behaviors may change, outputs might differ, or known malware might linger.
 
-For compiled languages, alignment of dependencies in distributed binaries is required for creating reproducible builds. For Python, is it possible to enforce reproducible behavior?
+For compiled languages, alignment of dependencies in distributed binaries is required for creating [reproducible builds](https://reproducible-builds.org). When running Python in local environments, is it possible to enforce something similar?
 
-Leveraging Python's support for such initialization intervention, the `fetter` command-line tool can configure an environment's `python` to either warn or exit before running with misaligned dependencies. For example, the following command will configure `fetter` to always validate the environment of the locally active `python3` with `requirements.lock`:
+Leveraging Python's support for such initialization intervention, the [Fetter](https://github.com/fetter-io/fetter-rs) command-line tool can configure an environment's `python` to either warn or exit before running with misaligned dependencies. For example, the following command will configure `fetter` to always validate the environment of the locally active `python3` with "requirements.lock":
 
 ```shell
 $ fetter -e python3 site-install --bound requirements.lock
 ```
 
-Implemented in efficient multi-threaded Rust, performance overhead is insignificant. While project-specific Python "front-end" commands like `uv run` or `poetry run` offer related functionality, `fetter` is run on every execution of `python` itself, and can be used with any type of project.
+Implemented in efficient multi-threaded Rust, performance overhead is insignificant. While project-specific Python "front-end" commands like `uv run` or `poetry run` offer related functionality, `fetter` is run on every execution of `python` itself, and can be used with any type of Python project.
 
 ## Validating Environments
 
-To validate an environment, two things are required: (1) the Python executable for that environment and (2) a manifest of dependencies.
+Before automating validation, a few examples of `fetter` usage are provided. To validate an environment, two things are required: (1) the Python executable for that environment and (2) a manifest of dependencies.
 
 Environments are specified with a path to a Python executable, given with the `--exe` or `-e` parameter. If a virtual environment is active, specifying `-e python3` is sufficient.
 
-Dependencies are specified with a path given to the `--bound` parameter. Most Python projects define direct (explicitly imported) dependencies in a `requirements.txt` or `pyproject.toml` file. As direct dependencies generally require many of their own "transitive" dependencies, a direct dependency listing is insufficient to fully define an environment. For this reason, tools such as `pip-compile`, `pipenv`, `poetry` and `uv` offer solutions for maintaining "lock" files: complete definitions of both direct and transitive dependencies.
+Dependencies are specified with a file path given to the `--bound` parameter. Most Python projects define direct (explicitly imported) dependencies in a "requirements.txt" or "pyproject.toml" file. As direct dependencies generally require many of their own "transitive" dependencies, a direct dependency listing is insufficient to fully define an environment. For this reason, tools such as `pip-compile`, `pipenv`, `poetry` and `uv` offer solutions for maintaining lock files: complete definitions of both direct and transitive dependencies.
 
-Given values for `-e` and `--bound`, `fetter validate` can be used to validate an environment. A fresh virtual environment can be created with Python's built-in `venv` to demonstrate:
+Given values for `-e` and `--bound`, the `fetter validate` command can be used to validate an environment. To demonstrate, a fresh virtual environment can be created with Python's built-in `venv` to demonstrate:
 
 ```shell
 $ python3 -m venv ~/.env-test
 $ source ~/.env-test/bin/activate
+{.env-test} $
 ```
 
 Given a "requirements.txt" file with the entries shown below, `pip install -r` can be used to install all packages:
@@ -69,19 +62,20 @@ While unrequired packages can be accepted with the `--superset` flag, this disab
 {.env-test} % fetter -e python3 validate --bound requirements.txt --superset
 ```
 
-To comprehensively validate an environment, a lock file is required. The `--bound` argument will accept managed lock files from `pip-tools`, `pipenv`, `poetry`, `uv`, and even the proposed [PEP 751](https://peps.python.org/pep-0751) format. A simple option is to use `pip freeze`:
+To comprehensively validate an environment, a lock file is required. The `--bound` argument will accept lock files created by `pip-tools`, `pipenv`, `poetry`, `uv`, and even the proposed [PEP 751](https://peps.python.org/pep-0751) format. A simple alternative is to use `pip freeze`:
 
 ```shell
 {.env-test} % pip freeze > requirements.lock
 ```
 
-Validating against "requirements.lock", the `--superset` argument is no longer necessary. Now all dependencies (both direct and transitive) are bound within a fixed definition.
+Validating against "requirements.lock", the `--superset` argument is no longer necessary. Now all dependencies, both direct and transitive, are bound within a fixed definition.
 
 ```shell
 {.env-test} % fetter -e python3 validate --bound requirements.lock
 ```
 
-## Automating Validation with `fetter site-install`
+
+## Automating Validation
 
 While environment validation with `fetter` can be done as needed or with every commit (via `pre-commit`), a truly reproducible, locked environment is only maintainable if validation is done before every Python execution. The `fetter site-install` command installs a special ".pth" file in the target environment's "site-packages" directory that, at the start of Python site initialization, runs a pre-configured `fetter validate` command. By default, if validation fails, a warning is printed. As shown below, the same arguments provided to `validate` are provided to `site-install`:
 
@@ -102,7 +96,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 >>>
 ```
 
-For even stronger control, if environment validation fails, `fetter` can exit the process with a supplied exit code.
+For even stronger control, if environment validation fails, `fetter` can exit the process with a supplied exit code:
 
 ```shell
 {.env-test} $ fetter -e python3 site-install --bound requirements.lock exit --code 3
@@ -119,8 +113,8 @@ To uninstall automatic environment validation, use `fetter site-uninstall`:
 {.env-test} $ fetter -e python3 site-uninstall
 ```
 
-## Active Environment Locking
+## Continuous Environment Locking
 
-Unlike compiled languages, where dependencies are locked at build time and unchangeable at run time, local Python environments are "live": Python will attempt to run regardless of if dependencies have drifted from defined expectations. With `fetter`, dependency alignment can be ensured before every execution.
+Unlike compiled languages, where dependencies are locked at build time and unchangeable at run time, local Python environments are "live": Python will attempt to run regardless of if dependencies have drifted from defined expectations. With Fetter, dependency alignment can be ensured before every execution.
 
 
