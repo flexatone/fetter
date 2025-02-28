@@ -584,12 +584,14 @@ where
                 Some(SiteInstallSubcommand::Warn) | None => None,
                 Some(SiteInstallSubcommand::Exit { code }) => Some(*code),
             };
-            sfs.site_validate_install(bound,
+            sfs.site_validate_install(
+                bound,
                 bound_options,
                 ignore,
                 &vf,
                 exit_else_warn,
-                log)?;
+                log,
+            )?;
         }
         Some(Commands::SiteUninstall {}) => {
             sfs.site_validate_uninstall(log)?;
