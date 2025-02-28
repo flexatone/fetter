@@ -247,6 +247,7 @@ repos:
 - `--user_site`: Force inclusion of the user site-packages, even if it is not activated. Defaults to only including if the interpreter is configured to use it.
 - `--cache-duration, -c`: Create or use a cache that expires after the provided number of seconds. A duration of zero will disable caching.
 - `--log, -l`: Enable logging output.
+- `--stderr`: Force all output to stderr.
 
 ### Command: `fetter scan`
 

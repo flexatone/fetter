@@ -269,10 +269,10 @@ impl UnpackReport {
         }
     }
 
-    pub(crate) fn to_writer(&self) -> io::Result<()> {
+    pub(crate) fn to_writer(&self, stderr: bool) -> io::Result<()> {
         match self {
-            UnpackReport::Full(report) => report.to_writer(),
-            UnpackReport::Count(report) => report.to_writer(),
+            UnpackReport::Full(report) => report.to_writer(stderr),
+            UnpackReport::Count(report) => report.to_writer(stderr),
         }
     }
 

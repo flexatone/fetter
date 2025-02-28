@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::env;
 use std::fmt::Write;
 use std::fs;
-use std::io::stderr;
+use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
@@ -11,6 +11,8 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
+// use std::os::fd::AsRawFd;
+// use std::io::Write;
 
 //------------------------------------------------------------------------------
 
@@ -26,7 +28,7 @@ pub(crate) fn logger_core(module: &str, msg: &str) {
     let duration_since_epoch =
         now.duration_since(UNIX_EPOCH).expect("Time went backwards");
 
-    let mut writer = stderr();
+    let mut writer = io::stderr();
     write_color(&mut writer, "#333333", "fetter: ");
     write_color(
         &mut writer,
