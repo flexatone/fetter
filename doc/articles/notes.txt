@@ -155,7 +155,7 @@ Tableable
 
     Implementer must define get_header, get_records as a Vec of Rowabel
 
-    Provides to_file, to_stdout methods
+    Provides to_file, to_writer methods
 
 
 Count Report

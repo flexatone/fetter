@@ -4,7 +4,7 @@ use crossterm::{
     terminal::{Clear, ClearType},
     ExecutableCommand,
 };
-use std::io::{stdout, Write};
+use std::io::Write;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -12,6 +12,7 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
+use crate::util::get_writer;
 use crate::write_color::write_color;
 
 const FETTER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -33,17 +34,17 @@ fn get_banner(message: Option<String>) -> String {
     format!("fetter {}{}\n", FETTER_VERSION, msg)
 }
 
-pub(crate) fn print_banner(is_failure: bool, message: Option<String>) {
-    let mut stdout = stdout();
+pub(crate) fn print_banner(is_failure: bool, message: Option<String>, stderr: bool) {
+    let mut writer = get_writer(stderr);
     if is_failure {
-        write_color(&mut stdout, "#cc0000", "Failed: ");
+        write_color(&mut writer, "#cc0000", "Failed: ");
     }
-    write_color(&mut stdout, "#999999", &get_banner(message))
+    write_color(&mut writer, "#999999", &get_banner(message));
 }
 
-pub(crate) fn spin(active: Arc<AtomicBool>, message: String) {
-    let mut stdout = stdout();
-    if !stdout.is_tty() {
+pub(crate) fn spin(active: Arc<AtomicBool>, message: String, stderr: bool) {
+    let mut writer = get_writer(stderr);
+    if !writer.is_tty() {
         return;
     }
     let mut frame_idx = 0;
@@ -53,18 +54,18 @@ pub(crate) fn spin(active: Arc<AtomicBool>, message: String) {
         let delay_init = Duration::from_secs(1);
         thread::sleep(delay_init);
         if active.load(Ordering::Relaxed) {
-            stdout.execute(Clear(ClearType::CurrentLine)).unwrap();
+            writer.execute(Clear(ClearType::CurrentLine)).unwrap();
             while active.load(Ordering::Relaxed) {
-                stdout.execute(cursor::MoveToColumn(0)).unwrap();
+                writer.execute(cursor::MoveToColumn(0)).unwrap();
                 let fs = FRAME_SPIN[frame_idx % FRAME_SPIN.len()];
                 let msg = format!("{} {}... ", fs, message);
-                write_color(&mut stdout, "#666666", &msg);
-                stdout.flush().unwrap();
+                write_color(&mut writer, "#666666", &msg);
+                writer.flush().unwrap();
                 thread::sleep(Duration::from_millis(80));
                 frame_idx += 1;
             }
-            stdout.execute(cursor::MoveToColumn(0)).unwrap();
-            stdout.execute(Clear(ClearType::CurrentLine)).unwrap();
+            writer.execute(cursor::MoveToColumn(0)).unwrap();
+            writer.execute(Clear(ClearType::CurrentLine)).unwrap();
         }
     });
 }

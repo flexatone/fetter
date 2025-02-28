@@ -87,6 +87,10 @@ struct Cli {
     #[arg(long, short)]
     log: bool,
 
+    /// Force all output to stdout.
+    #[arg(long)]
+    stderr: bool,
+
     /// On validation failures, print version information and provided string.
     #[arg(long, short, required = false)]
     banner: Option<String>,
@@ -166,6 +170,10 @@ enum Commands {
         /// Names of additional optional (extra) dependency groups.
         #[arg(long, value_name = "OPTIONS")]
         bound_options: Option<Vec<String>>,
+
+        /// Names of packages to be excluded from all evaluation.
+        #[arg(long, value_name = "OPTIONS", default_value = "pip")]
+        ignore: Vec<String>,
 
         /// If the subset flag is set, the observed packages can be a subset of the bound requirements.
         #[arg(long)]
@@ -404,6 +412,7 @@ fn get_scan(
     animate: bool,
     cache_dur: Duration,
     log: bool,
+    stderr: bool,
 ) -> ResultDynError<ScanFS> {
     ScanFS::from_cache(exe_paths, force_usite, cache_dur, log).or_else(|err| {
         if log {
@@ -412,7 +421,7 @@ fn get_scan(
         // full load
         let active = Arc::new(AtomicBool::new(true));
         if animate {
-            spin(active.clone(), "scanning".to_string());
+            spin(active.clone(), "scanning".to_string(), stderr);
         }
         let sfsl = ScanFS::from_exes(exe_paths, force_usite, log)?;
 
@@ -442,6 +451,7 @@ where
     }
     let log = cli.log;
     let quiet = cli.quiet;
+    let stderr = cli.stderr;
     let banner = cli.banner;
 
     // do a fresh scan or load a cached scan
@@ -451,6 +461,7 @@ where
         !quiet,
         Duration::from_secs(cli.cache_duration),
         log,
+        stderr,
     )?;
 
     match &cli.command {
@@ -461,7 +472,7 @@ where
             }
             Some(ScanSubcommand::Display) | None => {
                 let sr = sfs.to_scan_report();
-                let _ = sr.to_stdout();
+                let _ = sr.to_writer(stderr);
             }
         },
         Some(Commands::Search {
@@ -476,7 +487,7 @@ where
             Some(SearchSubcommand::Display) | None => {
                 // default
                 let sr = sfs.to_search_report(pattern, !case);
-                let _ = sr.to_stdout();
+                let _ = sr.to_writer(stderr);
             }
         },
         Some(Commands::Count { subcommands }) => match subcommands {
@@ -487,7 +498,7 @@ where
             Some(CountSubcommand::Display) | None => {
                 // default
                 let cr = sfs.to_count_report();
-                let _ = cr.to_stdout();
+                let _ = cr.to_writer(stderr);
             }
         },
         Some(Commands::Derive {
@@ -503,7 +514,7 @@ where
                 // default
                 let dm = sfs.to_dep_manifest((*anchor).into())?;
                 let dmr = dm.to_dep_manifest_report();
-                let _ = dmr.to_stdout();
+                let _ = dmr.to_writer(stderr);
             }
         },
         Some(Commands::Validate {
@@ -532,7 +543,7 @@ where
             );
             // we only print the banner on failure for now
             if vr.len() > 0 && banner.is_some() {
-                print_banner(true, banner);
+                print_banner(true, banner, stderr);
             }
             match subcommands {
                 Some(ValidateSubcommand::Json) => {
@@ -545,7 +556,7 @@ where
                     process::exit(if vr.len() > 0 { *code } else { 0 });
                 }
                 Some(ValidateSubcommand::Display { code }) => {
-                    vr.to_stdout()?;
+                    vr.to_writer(stderr)?;
                     if vr.len() > 0 {
                         if let Some(e) = code {
                             process::exit(*e);
@@ -553,13 +564,14 @@ where
                     }
                 }
                 None => {
-                    vr.to_stdout()?;
+                    vr.to_writer(stderr)?;
                 }
             }
         }
         Some(Commands::SiteInstall {
             bound,
             bound_options,
+            ignore,
             subset,
             superset,
             subcommands,
@@ -572,7 +584,14 @@ where
                 Some(SiteInstallSubcommand::Warn) | None => None,
                 Some(SiteInstallSubcommand::Exit { code }) => Some(*code),
             };
-            sfs.site_validate_install(bound, bound_options, &vf, exit_else_warn, log)?;
+            sfs.site_validate_install(
+                bound,
+                bound_options,
+                ignore,
+                &vf,
+                exit_else_warn,
+                log,
+            )?;
         }
         Some(Commands::SiteUninstall {}) => {
             sfs.site_validate_uninstall(log)?;
@@ -585,7 +604,11 @@ where
             // network look makes this potentially slow
             let active = Arc::new(AtomicBool::new(true));
             if !quiet {
-                spin(active.clone(), "vulnerability searching".to_string());
+                spin(
+                    active.clone(),
+                    "vulnerability searching".to_string(),
+                    stderr,
+                );
             }
             let ar = sfs.to_audit_report(pattern, !case);
             if !quiet {
@@ -598,7 +621,7 @@ where
                 } // NOTE: might add Json and Exit
                 Some(AuditSubcommand::Display) | None => {
                     // default
-                    let _ = ar.to_stdout();
+                    let _ = ar.to_writer(stderr);
                     process::exit(if ar.len() > 0 { ERROR_EXIT_CODE } else { 0 });
                 }
             }
@@ -616,7 +639,7 @@ where
                 }
                 Some(UnpackCountSubcommand::Display) | None => {
                     // default
-                    let _ = ir.to_stdout();
+                    let _ = ir.to_writer(stderr);
                 }
             }
         }
@@ -633,7 +656,7 @@ where
                 }
                 Some(UnpackFilesSubcommand::Display) | None => {
                     // default
-                    let _ = ir.to_stdout();
+                    let _ = ir.to_writer(stderr);
                 }
             }
         }
@@ -672,6 +695,6 @@ mod tests {
     #[test]
     fn test_run_cli_a() {
         let _args = vec![OsString::from("fetter"), OsString::from("-h")];
-        // run_cli(args); // print to stdout
+        // run_cli(args);
     }
 }
