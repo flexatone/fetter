@@ -11,6 +11,7 @@ use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 
 // use crate::util::get_writer;
+use crate::util::get_writer;
 use crate::write_color::write_color;
 
 //------------------------------------------------------------------------------
@@ -227,12 +228,9 @@ pub(crate) trait Tableable<T: Rowable> {
     }
 
     fn to_writer(&self, stderr: bool) -> io::Result<()> {
-        if stderr {
-            let mut writer = io::stderr().lock();
-            to_table_display(&mut writer, self.get_header(), self.get_records())
-        } else {
-            let mut writer = io::stdout().lock();
-            to_table_display(&mut writer, self.get_header(), self.get_records())
-        }
+        // let mut stdout = io::stdout();
+        // let mut handle = stdout.lock();
+        let mut writer = get_writer(stderr);
+        to_table_display(&mut writer, self.get_header(), self.get_records())
     }
 }

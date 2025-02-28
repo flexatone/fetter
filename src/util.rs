@@ -4,15 +4,16 @@ use std::env;
 use std::fmt::Write;
 use std::fs;
 use std::io;
+use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
-// use std::os::fd::AsRawFd;
-// use std::io::Write;
+use std::time::{SystemTime, UNIX_EPOCH}; // Use `std::os::fd::AsRawFd`
+                                         // use std::os::fd::AsRawFd;
+                                         // use std::io::Write;
 
 //------------------------------------------------------------------------------
 
@@ -53,6 +54,46 @@ macro_rules! logger {
 }
 
 pub use crate::logger;
+
+//------------------------------------------------------------------------------
+
+pub(crate) enum StdWriter {
+    Stdout(io::Stdout),
+    Stderr(io::Stderr),
+}
+
+impl io::Write for StdWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            StdWriter::Stdout(stdout) => stdout.write(buf),
+            StdWriter::Stderr(stderr) => stderr.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            StdWriter::Stdout(stdout) => stdout.flush(),
+            StdWriter::Stderr(stderr) => stderr.flush(),
+        }
+    }
+}
+
+impl AsRawFd for StdWriter {
+    fn as_raw_fd(&self) -> RawFd {
+        match self {
+            StdWriter::Stdout(stdout) => stdout.as_raw_fd(),
+            StdWriter::Stderr(stderr) => stderr.as_raw_fd(),
+        }
+    }
+}
+
+pub(crate) fn get_writer(stderr: bool) -> StdWriter {
+    if stderr {
+        StdWriter::Stderr(io::stderr())
+    } else {
+        StdWriter::Stdout(io::stdout())
+    }
+}
 
 //------------------------------------------------------------------------------
 

@@ -408,6 +408,7 @@ fn get_scan(
     animate: bool,
     cache_dur: Duration,
     log: bool,
+    stderr: bool,
 ) -> ResultDynError<ScanFS> {
     ScanFS::from_cache(exe_paths, force_usite, cache_dur, log).or_else(|err| {
         if log {
@@ -416,7 +417,7 @@ fn get_scan(
         // full load
         let active = Arc::new(AtomicBool::new(true));
         if animate {
-            spin(active.clone(), "scanning".to_string());
+            spin(active.clone(), "scanning".to_string(), stderr);
         }
         let sfsl = ScanFS::from_exes(exe_paths, force_usite, log)?;
 
@@ -456,6 +457,7 @@ where
         !quiet,
         Duration::from_secs(cli.cache_duration),
         log,
+        stderr,
     )?;
 
     match &cli.command {
@@ -537,7 +539,7 @@ where
             );
             // we only print the banner on failure for now
             if vr.len() > 0 && banner.is_some() {
-                print_banner(true, banner);
+                print_banner(true, banner, stderr);
             }
             match subcommands {
                 Some(ValidateSubcommand::Json) => {
@@ -590,7 +592,11 @@ where
             // network look makes this potentially slow
             let active = Arc::new(AtomicBool::new(true));
             if !quiet {
-                spin(active.clone(), "vulnerability searching".to_string());
+                spin(
+                    active.clone(),
+                    "vulnerability searching".to_string(),
+                    stderr,
+                );
             }
             let ar = sfs.to_audit_report(pattern, !case);
             if !quiet {
