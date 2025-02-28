@@ -215,7 +215,7 @@ To run `fetter validate` with `pre-commit`, add the following to your `.pre-comm
 ```yaml
 repos:
 - repo: https://github.com/fetter-io/fetter-rs
-  rev: v1.7.0
+  rev: v1.8.0
   hooks:
     - id: fetter-validate
       args: [--bound, {FILE}, --superset, --subset, display, --code, 3]
@@ -231,7 +231,7 @@ To run `fetter audit` with `pre-commit`, add the following to your `.pre-commit-
 ```yaml
 repos:
 - repo: https://github.com/fetter-io/fetter-rs
-  rev: v1.7.0
+  rev: v1.8.0
   hooks:
     - id: fetter-audit
 ```
@@ -384,6 +384,14 @@ repos:
 
 
 ## What is New in Fetter
+
+
+### 1.8.0
+
+Added the `--ignore` parameter to `site-install`.
+
+Added the `--stderr` flag to optionally divert all output to stderr.
+
 
 ### 1.7.0
 
