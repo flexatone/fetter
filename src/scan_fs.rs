@@ -666,7 +666,7 @@ impl ScanFS {
                 install_validation(
                     exe,
                     &ba,
-                    bound_options.clone(), // TODO: take reference
+                    bound_options,
                     ignore,
                     vf,
                     exit_else_warn,
