@@ -228,8 +228,6 @@ pub(crate) trait Tableable<T: Rowable> {
     }
 
     fn to_writer(&self, stderr: bool) -> io::Result<()> {
-        // let mut stdout = io::stdout();
-        // let mut handle = stdout.lock();
         let mut writer = get_writer(stderr);
         to_table_display(&mut writer, self.get_header(), self.get_records())
     }

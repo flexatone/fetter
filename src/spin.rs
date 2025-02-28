@@ -35,7 +35,6 @@ fn get_banner(message: Option<String>) -> String {
 }
 
 pub(crate) fn print_banner(is_failure: bool, message: Option<String>, stderr: bool) {
-    // let mut writer = io::stdout();
     let mut writer = get_writer(stderr);
     if is_failure {
         write_color(&mut writer, "#cc0000", "Failed: ");
@@ -44,7 +43,6 @@ pub(crate) fn print_banner(is_failure: bool, message: Option<String>, stderr: bo
 }
 
 pub(crate) fn spin(active: Arc<AtomicBool>, message: String, stderr: bool) {
-    // let mut writer = io::stdout();
     let mut writer = get_writer(stderr);
     if !writer.is_tty() {
         return;

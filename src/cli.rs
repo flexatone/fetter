@@ -683,6 +683,6 @@ mod tests {
     #[test]
     fn test_run_cli_a() {
         let _args = vec![OsString::from("fetter"), OsString::from("-h")];
-        // run_cli(args); // print to stdout
+        // run_cli(args);
     }
 }
