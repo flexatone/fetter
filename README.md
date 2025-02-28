@@ -314,6 +314,7 @@ repos:
 - Options
   - `--bound, -b <FILE>`: Path or URL to the file containing bound requirements, which can be a requirements.txt, pyproject.toml or a lock file created by `uv`, `poetry`, `pipenv`, or `pip-tools`.
   - `--bound-options <OPTIONS>`: Names of additional optional dependency groups.
+  - `--ignore <OPTIONS>`: Names of packages to be excluded from all evaluation.
   - `--subset`: Allow the observed packages to be a subset of the bound requirements.
   - `--superset`: Allow the observed packages to be a superset of the bound requirements.
 - Subcommands
