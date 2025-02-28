@@ -19,7 +19,7 @@ use std::path::PathBuf;
 fn get_validate_args(
     bound: &Path,
     bound_options: &Option<Vec<String>>,
-    ignore: &Vec<String>,
+    ignore: &[String],
     vf: &ValidationFlags,
 ) -> Vec<String> {
     let mut args = Vec::new();
@@ -29,7 +29,7 @@ fn get_validate_args(
         args.push("--bound_options".to_string());
         args.extend(bo.iter().cloned());
     }
-    if ignore.len() > 0 {
+    if !ignore.is_empty() {
         args.push("--ignore".to_string());
         args.extend(ignore.iter().cloned());
     }
@@ -46,7 +46,7 @@ fn get_validate_command(
     executable: &Path, // only accept one
     bound: &Path,
     bound_options: &Option<Vec<String>>,
-    ignore: &Vec<String>,
+    ignore: &[String],
     vf: &ValidationFlags,
 ) -> Vec<String> {
     let validate_args = get_validate_args(bound, bound_options, ignore, vf);
@@ -72,7 +72,7 @@ fn get_validation_module(
     executable: &Path,
     bound: &Path,
     bound_options: &Option<Vec<String>>,
-    ignore: &Vec<String>,
+    ignore: &[String],
     vf: &ValidationFlags,
     exit_else_warn: Option<i32>,
     _cwd_option: Option<PathBuf>,
@@ -115,7 +115,7 @@ pub(crate) fn install_validation(
     executable: &Path,
     bound: &Path,
     bound_options: &Option<Vec<String>>,
-    ignore: &Vec<String>,
+    ignore: &[String],
     vf: &ValidationFlags,
     exit_else_warn: Option<i32>,
     site: &PathShared,
@@ -273,5 +273,22 @@ mod tests {
         let post =
             get_validation_module(&exe, &bound, &bound_options, &ignore, &vf, ec, cwd);
         assert_eq!(post, "import sys\nimport fetter\nfrom pathlib import Path\nrun = True\nif sys.argv:\n    name = Path(sys.argv[0]).name\n    run = not any(name.startswith(n) for n in ('fetter', 'pip', 'poetry', 'uv'))\nif run: fetter.run(['fetter', '-b', 'validate --bound requirements.txt --subset', '--cache-duration', '0', '--stderr', '-e', 'python3', 'validate', '--bound', 'requirements.txt', '--subset', 'display'])\n")
+    }
+
+    #[test]
+    fn test_get_validation_module_d() {
+        let exe = PathBuf::from("python3");
+        let bound = PathBuf::from("requirements.txt");
+        let bound_options = None;
+        let vf = ValidationFlags {
+            permit_superset: false,
+            permit_subset: true,
+        };
+        let ec: Option<i32> = None;
+        let cwd = Some(PathBuf::from("/home/foo"));
+        let ignore = vec!["pip".to_string()];
+        let post =
+            get_validation_module(&exe, &bound, &bound_options, &ignore, &vf, ec, cwd);
+        assert_eq!(post, "import sys\nimport fetter\nfrom pathlib import Path\nrun = True\nif sys.argv:\n    name = Path(sys.argv[0]).name\n    run = not any(name.startswith(n) for n in ('fetter', 'pip', 'poetry', 'uv'))\nif run: fetter.run(['fetter', '-b', 'validate --bound requirements.txt --ignore pip --subset', '--cache-duration', '0', '--stderr', '-e', 'python3', 'validate', '--bound', 'requirements.txt', '--ignore', 'pip', '--subset', 'display'])\n")
     }
 }

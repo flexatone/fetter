@@ -650,7 +650,7 @@ impl ScanFS {
         &self,
         bound: &Path,
         bound_options: &Option<Vec<String>>,
-        ignore: &Vec<String>,
+        ignore: &[String],
         vf: &ValidationFlags,
         exit_else_warn: Option<i32>,
         log: bool,
