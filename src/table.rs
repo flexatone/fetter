@@ -225,9 +225,9 @@ pub(crate) trait Tableable<T: Rowable> {
         )
     }
 
-    fn to_stdout(&self) -> io::Result<()> {
-        let stdout = io::stdout();
-        let mut handle = stdout.lock();
-        to_table_display(&mut handle, self.get_header(), self.get_records())
+    fn to_writer(&self) -> io::Result<()> {
+        let mut stdout = io::stdout();
+        // let mut handle = stdout.lock();
+        to_table_display(&mut stdout, self.get_header(), self.get_records())
     }
 }

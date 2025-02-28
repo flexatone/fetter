@@ -461,7 +461,7 @@ where
             }
             Some(ScanSubcommand::Display) | None => {
                 let sr = sfs.to_scan_report();
-                let _ = sr.to_stdout();
+                let _ = sr.to_writer();
             }
         },
         Some(Commands::Search {
@@ -476,7 +476,7 @@ where
             Some(SearchSubcommand::Display) | None => {
                 // default
                 let sr = sfs.to_search_report(pattern, !case);
-                let _ = sr.to_stdout();
+                let _ = sr.to_writer();
             }
         },
         Some(Commands::Count { subcommands }) => match subcommands {
@@ -487,7 +487,7 @@ where
             Some(CountSubcommand::Display) | None => {
                 // default
                 let cr = sfs.to_count_report();
-                let _ = cr.to_stdout();
+                let _ = cr.to_writer();
             }
         },
         Some(Commands::Derive {
@@ -503,7 +503,7 @@ where
                 // default
                 let dm = sfs.to_dep_manifest((*anchor).into())?;
                 let dmr = dm.to_dep_manifest_report();
-                let _ = dmr.to_stdout();
+                let _ = dmr.to_writer();
             }
         },
         Some(Commands::Validate {
@@ -545,7 +545,7 @@ where
                     process::exit(if vr.len() > 0 { *code } else { 0 });
                 }
                 Some(ValidateSubcommand::Display { code }) => {
-                    vr.to_stdout()?;
+                    vr.to_writer()?;
                     if vr.len() > 0 {
                         if let Some(e) = code {
                             process::exit(*e);
@@ -553,7 +553,7 @@ where
                     }
                 }
                 None => {
-                    vr.to_stdout()?;
+                    vr.to_writer()?;
                 }
             }
         }
@@ -598,7 +598,7 @@ where
                 } // NOTE: might add Json and Exit
                 Some(AuditSubcommand::Display) | None => {
                     // default
-                    let _ = ar.to_stdout();
+                    let _ = ar.to_writer();
                     process::exit(if ar.len() > 0 { ERROR_EXIT_CODE } else { 0 });
                 }
             }
@@ -616,7 +616,7 @@ where
                 }
                 Some(UnpackCountSubcommand::Display) | None => {
                     // default
-                    let _ = ir.to_stdout();
+                    let _ = ir.to_writer();
                 }
             }
         }
@@ -633,7 +633,7 @@ where
                 }
                 Some(UnpackFilesSubcommand::Display) | None => {
                     // default
-                    let _ = ir.to_stdout();
+                    let _ = ir.to_writer();
                 }
             }
         }
