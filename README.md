@@ -392,6 +392,8 @@ Added the `--ignore` parameter to `site-install`.
 
 Added the `--stderr` flag to optionally divert all output to stderr.
 
+Updated `site-install` to always use `--stderr`.
+
 
 ### 1.7.0
 
