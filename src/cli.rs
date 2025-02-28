@@ -171,6 +171,10 @@ enum Commands {
         #[arg(long, value_name = "OPTIONS")]
         bound_options: Option<Vec<String>>,
 
+        /// Names of packages to be excluded from all evaluation.
+        #[arg(long, value_name = "OPTIONS", default_value = "pip")]
+        ignore: Vec<String>,
+
         /// If the subset flag is set, the observed packages can be a subset of the bound requirements.
         #[arg(long)]
         subset: bool,
@@ -567,6 +571,7 @@ where
         Some(Commands::SiteInstall {
             bound,
             bound_options,
+            ignore,
             subset,
             superset,
             subcommands,
@@ -579,7 +584,12 @@ where
                 Some(SiteInstallSubcommand::Warn) | None => None,
                 Some(SiteInstallSubcommand::Exit { code }) => Some(*code),
             };
-            sfs.site_validate_install(bound, bound_options, &vf, exit_else_warn, log)?;
+            sfs.site_validate_install(bound,
+                bound_options,
+                ignore,
+                &vf,
+                exit_else_warn,
+                log)?;
         }
         Some(Commands::SiteUninstall {}) => {
             sfs.site_validate_uninstall(log)?;

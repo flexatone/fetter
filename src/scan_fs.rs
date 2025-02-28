@@ -650,6 +650,7 @@ impl ScanFS {
         &self,
         bound: &Path,
         bound_options: &Option<Vec<String>>,
+        ignore: &Vec<String>,
         vf: &ValidationFlags,
         exit_else_warn: Option<i32>,
         log: bool,
@@ -658,14 +659,15 @@ impl ScanFS {
             return Err(format!("site-install will not operate on multiple ({}) Python environments; use `-e` to specify a single Python environment.", self.exe_to_sites.len()).into());
         }
         let ba = path_normalize(bound, true)?;
-        // generally expect this to run with a single exe, so no need to parallelize
+        // only a single exe, so no need to parallelize
         for (exe, sites) in &self.exe_to_sites {
             // NOTE: taking the first site, but might prioritize by some other criteria
             if let Some(site) = sites.first() {
                 install_validation(
                     exe,
                     &ba,
-                    bound_options.clone(),
+                    bound_options.clone(), // TODO: take reference
+                    ignore,
                     vf,
                     exit_else_warn,
                     site,
@@ -1782,9 +1784,10 @@ mod tests {
             permit_superset: false,
             permit_subset: false,
         };
+        let ignore = vec![];
         // ensure this retruns an error when multiple exe are defined
         assert!(sfs
-            .site_validate_install(&bound, &bound_options, &vf, None, false)
+            .site_validate_install(&bound, &bound_options, &ignore, &vf, None, false)
             .is_err());
     }
 

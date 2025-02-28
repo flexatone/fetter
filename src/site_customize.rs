@@ -66,6 +66,7 @@ fn get_validation_module(
     executable: &Path,
     bound: &Path,
     bound_options: Option<Vec<String>>,
+    ignore: &Vec<String>,
     vf: &ValidationFlags,
     exit_else_warn: Option<i32>,
     _cwd_option: Option<PathBuf>,
@@ -108,6 +109,7 @@ pub(crate) fn install_validation(
     executable: &Path,
     bound: &Path,
     bound_options: Option<Vec<String>>,
+    ignore: &Vec<String>,
     vf: &ValidationFlags,
     exit_else_warn: Option<i32>,
     site: &PathShared,
@@ -118,6 +120,7 @@ pub(crate) fn install_validation(
         executable,
         bound,
         bound_options,
+        ignore,
         vf,
         exit_else_warn,
         cwd_option,
@@ -224,7 +227,8 @@ mod tests {
             permit_subset: true,
         };
         let ec: Option<i32> = Some(4);
-        let post = get_validation_module(&exe, &bound, bound_options, &vf, ec, None);
+        let ignore = vec![];
+        let post = get_validation_module(&exe, &bound, bound_options, &ignore, &vf, ec, None);
         assert_eq!(post, "import sys\nimport fetter\nfrom pathlib import Path\nrun = True\nif sys.argv:\n    name = Path(sys.argv[0]).name\n    run = not any(name.startswith(n) for n in ('fetter', 'pip', 'poetry', 'uv'))\nif run: fetter.run(['fetter', '-b', 'validate --bound requirements.txt --subset', '--cache-duration', '0', '--stderr', '-e', 'python3', 'validate', '--bound', 'requirements.txt', '--subset', 'display', '--code', '4'])\n")
     }
 
@@ -238,7 +242,8 @@ mod tests {
             permit_subset: true,
         };
         let ec: Option<i32> = None;
-        let post = get_validation_module(&exe, &bound, bound_options, &vf, ec, None);
+        let ignore = vec![];
+        let post = get_validation_module(&exe, &bound, bound_options, &ignore, &vf, ec, None);
         assert_eq!(post, "import sys\nimport fetter\nfrom pathlib import Path\nrun = True\nif sys.argv:\n    name = Path(sys.argv[0]).name\n    run = not any(name.startswith(n) for n in ('fetter', 'pip', 'poetry', 'uv'))\nif run: fetter.run(['fetter', '-b', 'validate --bound requirements.txt --subset', '--cache-duration', '0', '--stderr', '-e', 'python3', 'validate', '--bound', 'requirements.txt', '--subset', 'display'])\n")
     }
 
@@ -253,7 +258,8 @@ mod tests {
         };
         let ec: Option<i32> = None;
         let cwd = Some(PathBuf::from("/home/foo"));
-        let post = get_validation_module(&exe, &bound, bound_options, &vf, ec, cwd);
+        let ignore = vec![];
+        let post = get_validation_module(&exe, &bound, bound_options, &ignore, &vf, ec, cwd);
         assert_eq!(post, "import sys\nimport fetter\nfrom pathlib import Path\nrun = True\nif sys.argv:\n    name = Path(sys.argv[0]).name\n    run = not any(name.startswith(n) for n in ('fetter', 'pip', 'poetry', 'uv'))\nif run: fetter.run(['fetter', '-b', 'validate --bound requirements.txt --subset', '--cache-duration', '0', '--stderr', '-e', 'python3', 'validate', '--bound', 'requirements.txt', '--subset', 'display'])\n")
     }
 }
